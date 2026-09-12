@@ -24,11 +24,6 @@ class ModelFileLocator @Inject constructor(
     /** The model is only usable if it exists and is not a zero-byte or truncated download. */
     fun isPresent(): Boolean = modelFile.isFile && modelFile.length() > 0L
 
-    fun sizeBytes(): Long = if (modelFile.isFile) modelFile.length() else 0L
-
-    /** Shown on the model-missing screen so the operator can copy it straight into a terminal. */
-    fun pushCommand(): String = "adb push $MODEL_FILE_NAME $absolutePath"
-
     companion object {
         const val MODEL_FILE_NAME: String = "gemma3-270m-it-q8.litertlm"
     }

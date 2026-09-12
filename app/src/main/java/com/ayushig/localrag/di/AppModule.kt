@@ -1,7 +1,9 @@
 package com.ayushig.localrag.di
 
 import com.ayushig.localrag.data.FakeEchoLlmRepository
+import com.ayushig.localrag.data.repository.FakePortfolioRepository
 import com.ayushig.localrag.domain.repository.LlmRepository
+import com.ayushig.localrag.domain.repository.PortfolioRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -16,4 +18,9 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindLlmRepository(impl: FakeEchoLlmRepository): LlmRepository
+
+    // Hardcoded portfolio data. Swapped for a real source once one exists.
+    @Binds
+    @Singleton
+    abstract fun bindPortfolioRepository(impl: FakePortfolioRepository): PortfolioRepository
 }

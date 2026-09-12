@@ -5,20 +5,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
-import com.ayushig.localrag.ui.chat.ChatRoute
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.ayushig.localrag.ui.navigation.AppNavHost
+import com.ayushig.localrag.ui.navigation.AssistantRoute
+import com.ayushig.localrag.ui.navigation.PortfolioRoute
+import com.ayushig.localrag.ui.navigation.ProfileRoute
 import com.ayushig.localrag.ui.theme.LocalRAGTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -37,61 +41,56 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun LocalRAGApp() {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
+    val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = backStackEntry?.destination
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
-            AppDestinations.entries.forEach {
+            AppDestinations.entries.forEach { destination ->
                 item(
                     icon = {
+                        // ic_account_box is a 48dp asset while the others are 24dp; pin the size
+                        // so every tab's label sits on the same baseline.
                         Icon(
-                            painterResource(it.icon),
-                            contentDescription = it.label
+                            painter = painterResource(destination.icon),
+                            contentDescription = destination.label,
+                            modifier = Modifier.size(24.dp),
                         )
                     },
-                    label = { Text(it.label) },
-                    selected = it == currentDestination,
-                    onClick = { currentDestination = it }
+                    label = { Text(destination.label) },
+                    // The detail screen sits under the portfolio route, so the Portfolio tab
+                    // stays selected while a category is open.
+                    selected = currentDestination?.hierarchy?.any { navDestination ->
+                        navDestination.route?.startsWith(destination.route) == true
+                    } == true,
+                    onClick = { navController.switchTab(destination.route) },
                 )
             }
         }
     ) {
-        when (currentDestination) {
-            // The generation spike lives here until the fintech screens exist.
-            AppDestinations.HOME -> ChatRoute(modifier = Modifier.fillMaxSize())
-            AppDestinations.FAVORITES,
-            AppDestinations.PROFILE,
-            -> Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                Greeting(
-                    name = currentDestination.label,
-                    modifier = Modifier.padding(innerPadding)
-                )
-            }
-        }
+        AppNavHost(navController = navController, modifier = Modifier.fillMaxSize())
+    }
+}
+
+/**
+ * Tab switching keeps each tab's own back stack and state, so the assistant's loaded engine and
+ * transcript survive a trip to the portfolio and back.
+ */
+private fun NavHostController.switchTab(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 
 enum class AppDestinations(
     val label: String,
     val icon: Int,
+    val route: String,
 ) {
-    HOME("Assistant", R.drawable.ic_home),
-    FAVORITES("Favorites", R.drawable.ic_favorite),
-    PROFILE("Profile", R.drawable.ic_account_box),
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    LocalRAGTheme {
-        Greeting("Android")
-    }
+    PORTFOLIO("Portfolio", R.drawable.ic_wallet, PortfolioRoute.ROUTE),
+    ASSISTANT("Assistant", R.drawable.ic_chat, AssistantRoute.ROUTE),
+    PROFILE("Profile", R.drawable.ic_account_box, ProfileRoute.ROUTE),
 }

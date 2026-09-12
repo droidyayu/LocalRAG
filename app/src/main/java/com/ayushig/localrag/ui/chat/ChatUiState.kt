@@ -10,7 +10,6 @@ data class ChatUiState(
     val engineState: EngineState = EngineState.Idle,
     val modelPresent: Boolean = true,
     val expectedModelPath: String = "",
-    val pushCommand: String = "",
     val messages: List<ChatMessage> = emptyList(),
     val input: String = "",
     val isGenerating: Boolean = false,

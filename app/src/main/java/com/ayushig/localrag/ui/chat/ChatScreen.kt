@@ -33,9 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ayushig.localrag.domain.model.ChatMessage
 import com.ayushig.localrag.domain.model.EngineState
@@ -255,9 +256,7 @@ private fun OverflowMenu(
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(
-                painter = androidx.compose.ui.res.painterResource(
-                    id = android.R.drawable.ic_menu_more,
-                ),
+                painter = painterResource(id = android.R.drawable.ic_menu_more),
                 contentDescription = "More",
             )
         }
