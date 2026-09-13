@@ -26,9 +26,8 @@ localRag {
         val embed = providers.gradleProperty("localRagEmbed").orNull == "true"
         enabled.set(embed)
         dimensions.set(256)
-        sidecarCommand.set(
-            listOf("python3", rootProject.file("tools/embed/hash_embed.py").absolutePath, "--dimensions", "256"),
-        )
+        sidecarScript.set(rootProject.layout.projectDirectory.file("tools/embed/hash_embed.py"))
+        sidecarArguments.set(listOf("--dimensions", "256"))
     }
 }
 

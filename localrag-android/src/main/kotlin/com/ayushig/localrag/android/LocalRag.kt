@@ -1,7 +1,10 @@
 package com.ayushig.localrag.android
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.util.Log
+import com.ayushig.localrag.android.internal.AnswerPipeline
 import com.ayushig.localrag.android.internal.BundleLoader
 import com.ayushig.localrag.android.internal.Generator
 import com.ayushig.localrag.android.internal.PromptBuilder
@@ -11,6 +14,7 @@ import com.ayushig.localrag.android.internal.SignatureVerifier
 import com.ayushig.localrag.core.answer.ClusterMatcher
 import com.ayushig.localrag.core.answer.OutputGate
 import com.ayushig.localrag.core.bundle.Bundle
+import com.ayushig.localrag.core.bundle.EmbedderDescriptor
 import com.ayushig.localrag.core.index.VectorIndex
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -46,14 +50,34 @@ class LocalRag private constructor(
         val generationModelPath: String? = null,
         val cacheDir: File,
         val appVersion: String,
-        /** Checked against the bundle manifest; a mismatch drops the vectors. */
-        val embeddingModelId: String? = null,
+        /**
+         * What this app believes its embedder does, compared field by field against the bundle
+         * manifest. Required alongside [embeddingModelPath]: without it there is nothing to
+         * compare the manifest to, and the parity check cannot do its job.
+         */
+        val embedder: EmbedderDescriptor? = null,
         val maxContextTokens: Int = 1200,
         val maxOutputTokens: Int = 256,
         val topK: Int = 4,
         val categories: Set<String> = emptySet(),
         val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
     )
+
+    /**
+     * Registered by the library rather than left to the host: a model that stays resident under
+     * memory pressure gets the whole app killed, and the fallback to extractive answers is
+     * invisible to the user anyway.
+     */
+    private val memoryCallback = object : ComponentCallbacks2 {
+        override fun onTrimMemory(level: Int) {
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) unloadModels()
+        }
+
+        override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+        @Deprecated("Required by ComponentCallbacks2 but never used")
+        override fun onLowMemory() = unloadModels()
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow<LocalRagState>(LocalRagState.Idle)
@@ -62,12 +86,14 @@ class LocalRag private constructor(
     private var bundle: Bundle? = null
     private var retriever: Retriever? = null
     private var embedder: QueryEmbedder? = null
+    private var pipeline: AnswerPipeline? = null
     private var generator: Generator? = null
     private var clusters: ClusterMatcher? = null
 
     suspend fun initialize() {
         if (_state.value is LocalRagState.Ready) return
         _state.value = LocalRagState.Loading
+        context.registerComponentCallbacks(memoryCallback)
 
         withContext(Dispatchers.IO) {
             runCatching {
@@ -77,8 +103,23 @@ class LocalRag private constructor(
                 generator = createGenerator()
 
                 bundle = loaded.bundle
-                retriever = Retriever(loaded.bundle, vectors, config.appVersion)
-                clusters = ClusterMatcher(loaded.bundle.clusters)
+                val activeRetriever = Retriever(loaded.bundle, vectors, config.appVersion)
+                retriever = activeRetriever
+                val activeClusters = ClusterMatcher(loaded.bundle.clusters)
+                clusters = activeClusters
+                pipeline = AnswerPipeline(
+                    retriever = activeRetriever,
+                    clusters = activeClusters,
+                    embedder = embedder,
+                    generator = generator,
+                    topK = config.topK,
+                    categories = config.categories,
+                    maxContextTokens = config.maxContextTokens,
+                    chunkCount = loaded.bundle.manifest.chunkCount,
+                    onRejected = { verdict ->
+                        Log.w(TAG, "generated answer rejected: ${verdict.reason} (${verdict.detail})")
+                    },
+                )
 
                 _state.value = LocalRagState.Ready(
                     chunkCount = loaded.bundle.manifest.chunkCount,
@@ -99,82 +140,15 @@ class LocalRag private constructor(
      * app team inspects a bad answer without the generator in the way.
      */
     suspend fun retrieveOnly(text: String): List<Passage> = withContext(Dispatchers.IO) {
-        val active = retriever ?: return@withContext emptyList()
-        active.retrieve(
-            query = text,
-            topK = config.topK,
-            queryVector = embedQuery(text),
-            categories = config.categories,
-        )
+        pipeline?.retrieve(text).orEmpty()
     }
 
-    fun query(text: String): Flow<AnswerChunk> = flow {
-        val active = retriever
-        if (active == null) {
+    fun query(text: String): Flow<AnswerChunk> {
+        val active = pipeline ?: return flow {
             emit(AnswerChunk.Error("LocalRag is not initialized"))
-            return@flow
         }
-
-        val retrievalStart = System.currentTimeMillis()
-        val passages = active.retrieve(
-            query = text,
-            topK = config.topK,
-            queryVector = embedQuery(text),
-            categories = config.categories,
-        )
-        val retrievalMs = System.currentTimeMillis() - retrievalStart
-
-        // Sources first, always. Retrieval takes milliseconds and generation does not, so the
-        // host app can render a source card while text arrives underneath.
-        emit(AnswerChunk.Sources(passages))
-
-        // A precomputed answer was written by a human and beats anything generated when it fits.
-        // Matched by BM25, so it works on a device with no models at all.
-        val cluster = clusters?.match(text)
-        if (cluster != null) {
-            emit(AnswerChunk.Token(cluster.answer))
-            emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.PRECOMPUTED))
-            return@flow
-        }
-
-        if (passages.isEmpty()) {
-            emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.EXTRACTIVE))
-            return@flow
-        }
-
-        val activeGenerator = generator
-        if (activeGenerator != null) {
-            val generationStart = System.currentTimeMillis()
-            val generated = activeGenerator.generate(
-                PromptBuilder.build(text, passages, config.maxContextTokens),
-            )
-            val generationMs = System.currentTimeMillis() - generationStart
-
-            // Buffered and checked before a single token is shown. A wrong figure that has
-            // already been displayed cannot be withdrawn.
-            val verdict = generated?.let {
-                OutputGate.check(it, passages.map { passage -> passage.text })
-            }
-            if (generated != null && verdict is OutputGate.Verdict.Allowed) {
-                emit(AnswerChunk.Token(generated))
-                emit(
-                    AnswerChunk.Done(
-                        metrics(retrievalMs, generationMs, passages),
-                        AnswerMode.GENERATED,
-                    ),
-                )
-                return@flow
-            }
-            if (verdict is OutputGate.Verdict.Rejected) {
-                Log.w(TAG, "generated answer rejected: ${verdict.reason} (${verdict.detail})")
-            }
-        }
-
-        // Extractive fallback: the best passage, verbatim. It can be the wrong passage for the
-        // question, but it cannot invent a number.
-        emit(AnswerChunk.Token(passages.first().text))
-        emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.EXTRACTIVE))
-    }.flowOn(Dispatchers.IO)
+        return active.answer(text).flowOn(Dispatchers.IO)
+    }
 
     /** Clears the conversation without discarding the engine, which would cost seconds to reload. */
     fun resetConversation() {
@@ -190,7 +164,21 @@ class LocalRag private constructor(
         embedder = null
         generator?.close()
         generator = null
-        bundle?.let { retriever = Retriever(it, null, config.appVersion) }
+        // Keep answering extractively from BM25 once the models are gone.
+        bundle?.let { loaded ->
+            val plain = Retriever(loaded, null, config.appVersion)
+            retriever = plain
+            pipeline = AnswerPipeline(
+                retriever = plain,
+                clusters = clusters ?: ClusterMatcher(loaded.clusters),
+                embedder = null,
+                generator = null,
+                topK = config.topK,
+                categories = config.categories,
+                maxContextTokens = config.maxContextTokens,
+                chunkCount = loaded.manifest.chunkCount,
+            )
+        }
         (_state.value as? LocalRagState.Ready)?.let { ready ->
             _state.value = ready.copy(usingVectors = false, canGenerate = false)
         }
@@ -205,7 +193,9 @@ class LocalRag private constructor(
         )
 
     fun release() {
+        runCatching { context.unregisterComponentCallbacks(memoryCallback) }
         unloadModels()
+        pipeline = null
         retriever = null
         clusters = null
         bundle = null
@@ -221,11 +211,19 @@ class LocalRag private constructor(
             Log.w(TAG, "an embedding model is configured but the bundle carries no vectors")
             return null
         }
+        val descriptor = config.embedder ?: run {
+            Log.w(
+                TAG,
+                "an embedding model is configured but Config.embedder was not supplied, so the " +
+                    "bundle vectors cannot be verified; retrieving with BM25 only",
+            )
+            return null
+        }
         return QueryEmbedder.createIfCompatible(
             modelPath = modelPath,
             cacheDir = config.cacheDir.path,
-            embedding = embedding,
-            configuredModelId = config.embeddingModelId,
+            manifest = embedding,
+            runtime = descriptor,
         ) { reason -> Log.w(TAG, reason) }
     }
 

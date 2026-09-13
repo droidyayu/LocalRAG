@@ -36,7 +36,9 @@ class LocalRagPlugin : Plugin<Project> {
             task.description = "Embeds changed LocalRAG chunks through the configured sidecar"
             task.chunksDir.set(parse.flatMap { it.chunksDir })
             task.vectorsDir.set(buildDir.dir("localrag/vectors"))
-            task.command.set(extension.embedding.sidecarCommand)
+            task.executable.set(extension.embedding.sidecarExecutable)
+            task.script.set(extension.embedding.sidecarScript)
+            task.arguments.set(extension.embedding.sidecarArguments)
             task.modelId.set(extension.embedding.modelId)
             task.dimensions.set(extension.embedding.dimensions)
             task.documentPrefix.set(extension.embedding.documentPrefix)
@@ -83,9 +85,20 @@ class LocalRagPlugin : Plugin<Project> {
         }
     }
 
-    private fun embeddingIsOn(extension: LocalRagExtension): Boolean =
-        extension.embedding.enabled.get() &&
-            extension.embedding.strategy.get() != EmbeddingStrategy.NONE
+    private fun embeddingIsOn(extension: LocalRagExtension): Boolean {
+        if (!extension.embedding.enabled.get()) return false
+        return when (extension.embedding.strategy.get()) {
+            EmbeddingStrategy.NONE -> false
+            EmbeddingStrategy.SIDECAR -> true
+            // Behaving like SIDECAR here would embed with a different toolchain than the one the
+            // build asked for, which is exactly the mismatch the manifest parity block exists to
+            // catch. Better to stop.
+            EmbeddingStrategy.JVM -> throw org.gradle.api.GradleException(
+                "localRag.embedding.strategy = JVM is not implemented. Use SIDECAR, or NONE to " +
+                    "build a BM25-only bundle.",
+            )
+        }
+    }
 
     private fun applyConventions(target: Project, extension: LocalRagExtension) {
         extension.docsDir.convention(target.layout.projectDirectory.dir("src/main/docs"))
@@ -101,7 +114,8 @@ class LocalRagPlugin : Plugin<Project> {
         extension.embedding.strategy.convention(EmbeddingStrategy.SIDECAR)
         extension.embedding.modelId.convention("embeddinggemma-300m-seq256")
         extension.embedding.dimensions.convention(256)
-        extension.embedding.sidecarCommand.convention(emptyList())
+        extension.embedding.sidecarExecutable.convention("python3")
+        extension.embedding.sidecarArguments.convention(emptyList())
         extension.embedding.queryPrefix.convention("task: search result | query: ")
         extension.embedding.documentPrefix.convention("title: none | text: ")
     }

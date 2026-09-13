@@ -1,6 +1,8 @@
 package com.ayushig.localrag.android.internal
 
+import com.ayushig.localrag.core.bundle.EmbedderDescriptor
 import com.ayushig.localrag.core.bundle.EmbeddingInfo
+import com.ayushig.localrag.core.bundle.EmbeddingParity
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.EmbeddingEngine
 import com.google.ai.edge.litertlm.EmbeddingEngineConfig
@@ -18,11 +20,11 @@ internal class QueryEmbedder private constructor(
     private val engine: EmbeddingEngine,
     private val options: EmbeddingOptions,
     private val queryPrefix: String,
-    val dimensions: Int,
-) : AutoCloseable {
+    override val dimensions: Int,
+) : Embedder {
 
     /** Null on any failure: a query that cannot be embedded falls back to BM25, never to an error. */
-    fun embed(text: String): FloatArray? = try {
+    override fun embed(text: String): FloatArray? = try {
         val response = engine.computeEmbedding(
             listOf(InputData.Text(queryPrefix + text)),
             options,
@@ -50,21 +52,18 @@ internal class QueryEmbedder private constructor(
         fun createIfCompatible(
             modelPath: String,
             cacheDir: String,
-            embedding: EmbeddingInfo,
-            configuredModelId: String?,
+            manifest: EmbeddingInfo,
+            runtime: EmbedderDescriptor,
             onIncompatible: (String) -> Unit,
         ): QueryEmbedder? {
-            if (configuredModelId != null && configuredModelId != embedding.modelId) {
+            // Compared field by field against what the host says its embedder does. Reading the
+            // manifest into the embedder instead would make agreement automatic and the check
+            // worthless.
+            val parity = EmbeddingParity.check(manifest, runtime)
+            if (parity is EmbeddingParity.Result.Incompatible) {
                 onIncompatible(
-                    "bundle was embedded with ${embedding.modelId} but this app is configured " +
-                        "for $configuredModelId; ignoring vectors and retrieving with BM25",
-                )
-                return null
-            }
-            if (!embedding.normalized) {
-                onIncompatible(
-                    "bundle vectors are not normalized, so a dot product is not a cosine; " +
-                        "ignoring vectors and retrieving with BM25",
+                    "bundle vectors do not match this embedder, retrieving with BM25 only: " +
+                        parity.reasons.joinToString("; "),
                 )
                 return null
             }
@@ -81,11 +80,11 @@ internal class QueryEmbedder private constructor(
                 QueryEmbedder(
                     engine = engine,
                     options = EmbeddingOptions(
-                        normalize = true,
-                        outputSize = embedding.dimensions,
+                        normalize = runtime.normalized,
+                        outputSize = runtime.dimensions,
                     ),
-                    queryPrefix = embedding.queryPrefix,
-                    dimensions = embedding.dimensions,
+                    queryPrefix = runtime.queryPrefix,
+                    dimensions = runtime.dimensions,
                 )
             } catch (failure: LiteRtLmJniException) {
                 onIncompatible("embedding engine failed to load: ${failure.message}")

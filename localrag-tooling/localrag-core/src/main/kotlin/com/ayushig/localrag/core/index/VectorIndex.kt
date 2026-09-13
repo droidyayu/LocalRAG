@@ -19,7 +19,12 @@ class VectorIndex(private val vectors: FloatArray, val dimensions: Int) {
         }
     }
 
-    fun search(query: FloatArray, topK: Int): List<ScoredChunk> {
+    /**
+     * [minimumScore] drops chunks that merely exist rather than resemble the query. Without it a
+     * corpus of any size returns every chunk, and fusion then promotes an unrelated passage purely
+     * for occupying a rank in the vector list.
+     */
+    fun search(query: FloatArray, topK: Int, minimumScore: Float = DEFAULT_MINIMUM_SCORE): List<ScoredChunk> {
         if (topK <= 0 || chunkCount == 0) return emptyList()
         require(query.size == dimensions) {
             "query has ${query.size} dimensions, index has $dimensions"
@@ -32,7 +37,7 @@ class VectorIndex(private val vectors: FloatArray, val dimensions: Int) {
             for (dimension in 0 until dimensions) {
                 dot += vectors[offset + dimension] * query[dimension]
             }
-            scored.add(ScoredChunk(chunkIndex, dot))
+            if (dot > minimumScore) scored.add(ScoredChunk(chunkIndex, dot))
         }
 
         return scored
@@ -41,6 +46,9 @@ class VectorIndex(private val vectors: FloatArray, val dimensions: Int) {
     }
 
     companion object {
+        /** Cosine of roughly 88 degrees: anything less related is noise, not a weak match. */
+        const val DEFAULT_MINIMUM_SCORE = 0.03f
+
         /** Build-time normalization keeps the runtime a dot product. */
         fun normalize(vector: FloatArray): FloatArray {
             var sum = 0.0

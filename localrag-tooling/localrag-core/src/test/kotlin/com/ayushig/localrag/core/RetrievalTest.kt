@@ -79,7 +79,18 @@ class RetrievalTest {
             0.7071f, 0.7071f,
         )
         val results = VectorIndex(vectors, dimensions = 2).search(floatArrayOf(1f, 0f), topK = 3)
-        assertEquals(listOf(0, 2, 1), results.map { it.chunkIndex })
+        // Chunk 1 is orthogonal to the query, so it is not a weak match, it is no match.
+        assertEquals(listOf(0, 2), results.map { it.chunkIndex })
+    }
+
+    @Test
+    fun `unrelated chunks never enter the ranking`() {
+        // Without this, every chunk occupies a rank in the vector list and fusion promotes an
+        // unrelated passage purely for being present.
+        val vectors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f)
+        val results = VectorIndex(vectors, dimensions = 2).search(floatArrayOf(1f, 0f), topK = 8)
+        assertEquals(1, results.size)
+        assertEquals(0, results.single().chunkIndex)
     }
 
     @Test

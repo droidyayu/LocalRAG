@@ -1,0 +1,29 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # The whole build-time and runtime parity guarantee rests on localrag-core being shared by
+      # the Gradle plugin and the Android runtime. A single Android or LiteRT dependency would
+      # break that sharing, and nothing else in the build would notice.
+      - name: localrag-core stays pure Kotlin
+        run: ./gradlew -p localrag-tooling :localrag-core:verifyNoPlatformDependencies
+
+      - name: Unit tests
+        run: |
+          ./gradlew -p localrag-tooling :localrag-core:test
+          ./gradlew :localrag-android:testDebugUnitTest :app:testDebugUnitTest
+
+      - name: Assemble
+        run: ./gradlew :app:assembleDebug

@@ -47,3 +47,43 @@ publishing {
         }
     }
 }
+
+/**
+ * Fails if anything Android or LiteRT reaches this module.
+ *
+ * The core is shared by the Gradle plugin and the Android runtime, and that sharing is the only
+ * thing guaranteeing an index built on CI matches queries typed on a phone. A platform dependency
+ * here would quietly end that, so the rule is enforced rather than documented.
+ */
+val forbiddenDependencyPrefixes = listOf(
+    "com.android",
+    "androidx",
+    "com.google.ai.edge",
+    "org.robolectric",
+)
+
+tasks.register("verifyNoPlatformDependencies") {
+    group = "verification"
+    description = "Fails if localrag-core gains an Android or LiteRT dependency"
+
+    val runtimeClasspath = configurations.named("runtimeClasspath")
+    val resolved = runtimeClasspath.map { configuration ->
+        configuration.incoming.resolutionResult.allDependencies
+            .map { it.requested.displayName }
+            .sorted()
+    }
+    val forbidden = forbiddenDependencyPrefixes
+
+    doLast {
+        val offenders = resolved.get().filter { dependency ->
+            forbidden.any { dependency.startsWith(it) }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                "localrag-core must stay free of Android and LiteRT, but found:\n" +
+                    offenders.joinToString("\n") { "  " + it },
+            )
+        }
+        logger.lifecycle("localrag-core: ${resolved.get().size} dependencies, none from a platform")
+    }
+}

@@ -26,8 +26,13 @@ abstract class EmbeddingSpec {
     abstract val dimensions: Property<Int>
     abstract val strategy: Property<EmbeddingStrategy>
 
-    /** Command and arguments; the chunk JSONL arrives on stdin and vectors leave on stdout. */
-    abstract val sidecarCommand: ListProperty<String>
+    /**
+     * Interpreter name, script and arguments, kept apart so no absolute path enters the task
+     * cache key. The chunk JSONL arrives on stdin and vectors leave on stdout.
+     */
+    abstract val sidecarExecutable: Property<String>
+    abstract val sidecarScript: RegularFileProperty
+    abstract val sidecarArguments: ListProperty<String>
 
     /** Written into the manifest so the runtime can refuse a mismatched embedder. */
     abstract val queryPrefix: Property<String>

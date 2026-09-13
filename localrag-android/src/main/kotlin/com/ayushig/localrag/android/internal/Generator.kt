@@ -25,12 +25,12 @@ internal class Generator private constructor(
     private val engine: Engine,
     private val systemInstruction: String,
     private val maxOutputTokens: Int,
-) : AutoCloseable {
+) : TextGenerator {
 
     private var conversation: Conversation? = null
 
     /** Null on any failure, so the caller falls back to an extractive answer rather than an error. */
-    suspend fun generate(prompt: String): String? = try {
+    override suspend fun generate(prompt: String): String? = try {
         val active = conversation ?: newConversation().also { conversation = it }
         active.sendMessageAsync(prompt).toList().joinToString("") { it.toString() }
     } catch (failure: LiteRtLmJniException) {
@@ -40,7 +40,7 @@ internal class Generator private constructor(
     }
 
     /** A fresh conversation from the same engine. Never a fresh engine. */
-    fun reset() {
+    override fun reset() {
         runCatching { conversation?.close() }
         conversation = null
     }
@@ -100,17 +100,24 @@ internal object PromptBuilder {
     fun build(query: String, passages: List<Passage>, maxContextTokens: Int): String {
         val budget = maxContextTokens * APPROXIMATE_CHARACTERS_PER_TOKEN
         val context = StringBuilder()
-        for (passage in passages) {
+        for ((index, passage) in passages.withIndex()) {
             val block = buildString {
                 append(passage.title)
                 passage.heading?.let { append(" — ").append(it) }
                 append("\n").append(passage.text).append("\n\n")
             }
-            if (context.length + block.length > budget) break
-            context.append(block)
+            if (context.length + block.length <= budget) {
+                context.append(block)
+                continue
+            }
+            // Never send a prompt with no documentation in it. A budget too small for even one
+            // passage truncates that passage instead of asking the model to answer from nothing.
+            if (index == 0) context.append(block.take(budget.coerceAtLeast(MINIMUM_CONTEXT_CHARS)))
+            break
         }
         return "Documentation:\n$context\nQuestion: $query"
     }
 
     private const val APPROXIMATE_CHARACTERS_PER_TOKEN = 4
+    private const val MINIMUM_CONTEXT_CHARS = 200
 }
