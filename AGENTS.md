@@ -54,12 +54,35 @@ are stateless and take an immutable state plus event lambdas.
 
 ## Current state
 
-Phases 1 to 3 are done: core, plugin, and on-device BM25 retrieval with zero models. The demo app
-ships a 53-chunk bundle in its assets and a documentation search screen driving `retrieveOnly`.
+All seven phases are implemented. The demo app answers portfolio questions from formatted data and
+documentation questions through the library, with generation running on a pushed Gemma model (see
+`scripts/push_model.sh`) and a documentation search screen driving `retrieveOnly`.
 
-Not built yet: the embedder (phase 4), the output gate and generation (phase 5), precomputed
-cluster answers (phase 6), the evaluation harness (phase 7). The LiteRT-LM generation spike in the
-demo app assistant still runs on a fake echo repository because the Gemma model was never pushed.
+- **Embedder (phase 4).** Neither candidate from the original plan: LiteRT-LM ships an
+  `EmbeddingEngine`, so runtime queries embed through it (`QueryEmbedder`) and build-time
+  embedding runs through the same engine via `tools/embed/embed.py` on `litert-lm-api`, pinned to
+  the same version. The manifest parity check compares every field and drops vectors loudly on any
+  mismatch. Open: whether `EmbeddingEngine` accepts a bare `.tflite` (see `tools/embed/README.md`).
+  The JVM strategy is explicitly refused by the plugin with an error telling the user SIDECAR or
+  NONE.
+- **Generation (phase 5).** The output gate runs buffered before any token is emitted, in that
+  order as specified. One `Engine` per process is enforced by `EngineSlot` (a second creation is
+  refused and falls back to extractive); one in-flight query at a time is enforced by
+  `AnswerPipeline` (a new query cancels the previous). Both models unload on
+  `onTrimMemory(TRIM_MEMORY_COMPLETE)` and the library keeps answering extractively.
+- **Clusters (phase 6).** `clustersFile` feeds precomputed answers matched by BM25 over the
+  questions, so they work with no models loaded.
+- **Eval (phase 7).** `queries.tsv` (~105 queries) asserts hit-rate@1 ≥ 70% and hit-rate@4 ≥ 85%;
+  plus a golden byte-identical bundle test, a BM25 snapshot round-trip parity test, and a printed
+  fixture ranking for human review. The degradation matrix is asserted on the JVM with fake models
+  (`DegradationMatrixTest`), deliberately instead of instrumented tests.
+
+Recorded deviations from the original plan: the extension splits `sidecarCommand` into
+`sidecarExecutable` / `sidecarScript` / `sidecarArguments` (the script is a content-tracked file
+input, which a command list cannot express); the plugin is three tasks (parse/embed/pack) wired
+through the AGP Variant API rather than `mergeAssets` by name; embedding defaults to off so a
+fresh checkout builds BM25-only; `VectorIndex` floors near-zero cosine scores so fusion cannot
+promote noise.
 
 ## Build
 

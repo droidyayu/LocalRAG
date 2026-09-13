@@ -6,8 +6,13 @@ import com.ayushig.localrag.android.Passage
 import com.ayushig.localrag.android.QueryMetrics
 import com.ayushig.localrag.core.answer.ClusterMatcher
 import com.ayushig.localrag.core.answer.OutputGate
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Retrieval and answering, with no Android dependency.
@@ -35,7 +40,30 @@ internal class AnswerPipeline(
         categories = categories,
     )
 
+    /**
+     * The collection currently inside [answer], if any. A new query cancels it: the native
+     * conversation is not safe for concurrent use, and answering a stale question after the user
+     * already asked another is never what is wanted.
+     */
+    private val flightMutex = Mutex()
+    private var inFlight: Job? = null
+
     fun answer(query: String): Flow<AnswerChunk> = flow {
+        val self = currentCoroutineContext()[Job]
+        flightMutex.withLock {
+            inFlight?.takeIf { it !== self }?.cancel()
+            inFlight = self
+        }
+        try {
+            answerUnguarded(query)
+        } finally {
+            flightMutex.withLock {
+                if (inFlight === self) inFlight = null
+            }
+        }
+    }
+
+    private suspend fun FlowCollector<AnswerChunk>.answerUnguarded(query: String) {
         val retrievalStart = System.currentTimeMillis()
         val passages = retrieve(query)
         val retrievalMs = System.currentTimeMillis() - retrievalStart
@@ -47,12 +75,12 @@ internal class AnswerPipeline(
         clusters.match(query)?.let { cluster ->
             emit(AnswerChunk.Token(cluster.answer))
             emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.PRECOMPUTED))
-            return@flow
+            return
         }
 
         if (passages.isEmpty()) {
             emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.EXTRACTIVE))
-            return@flow
+            return
         }
 
         val active = generator
@@ -74,7 +102,7 @@ internal class AnswerPipeline(
                             AnswerMode.GENERATED,
                         ),
                     )
-                    return@flow
+                    return
                 }
                 verdict is OutputGate.Verdict.Rejected -> onRejected(verdict)
             }

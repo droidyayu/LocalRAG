@@ -13,7 +13,10 @@ import com.ayushig.localrag.core.bundle.StoredChunk
 import com.ayushig.localrag.core.document.Chunk
 import com.ayushig.localrag.core.index.Bm25Index
 import com.ayushig.localrag.core.index.VectorIndex
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -173,6 +176,40 @@ class DegradationMatrixTest {
         val (_, mode, _) = answer(FakeEmbedder(), generator, "how long does a withdrawal take")
         assertEquals(AnswerMode.PRECOMPUTED, mode)
         assertEquals(0, generator.calls)
+    }
+
+    @Test
+    fun `a new query cancels the previous in-flight generation`() = runTest {
+        val enteredGeneration = CompletableDeferred<Unit>()
+        val generator = object : TextGenerator {
+            var calls = 0
+            override suspend fun generate(prompt: String): String? {
+                calls++
+                if (calls == 1) {
+                    enteredGeneration.complete(Unit)
+                    awaitCancellation()
+                }
+                return null
+            }
+            override fun reset() = Unit
+            override fun close() = Unit
+        }
+        val pipe = pipeline(null, generator)
+
+        val first = mutableListOf<AnswerChunk>()
+        val previous = launch { pipe.answer("what is margin").toList(first) }
+        enteredGeneration.await()
+
+        val second = pipe.answer("what is margin").toList()
+        previous.join()
+
+        assertTrue(previous.isCancelled)
+        // The cancelled query got its fast Sources out before generation started, then died.
+        assertTrue(first.first() is AnswerChunk.Sources)
+        assertTrue(first.none { it is AnswerChunk.Done })
+        // The new query ran to completion on its own: no generator reply, so extractive.
+        assertEquals(AnswerMode.EXTRACTIVE, (second.last() as AnswerChunk.Done).mode)
+        assertEquals(2, generator.calls)
     }
 
     @Test

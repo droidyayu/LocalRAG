@@ -101,12 +101,20 @@ abstract class ParseDocsTask : DefaultTask() {
         // Only published documents reach the bundle; drafts stay invisible to users.
         val published = documents.filter { it.status == DocumentStatus.PUBLISHED }
 
+        val expected = mutableSetOf<String>()
         for (document in published) {
             val result = chunker.chunk(document)
             issues += result.issues
             val target = File(outputDir, chunkFileName(File(docsDir.get().asFile, document.sourcePath)))
             target.writeText(JSON.encodeToString(result.chunks))
+            expected += target.name
         }
+
+        // A document flipped to draft or deleted upstream must not leave its chunks behind.
+        // The non-incremental path wiped the directory above; this covers the incremental one.
+        outputDir.listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "json" && it.name !in expected }
+            .forEach { it.delete() }
 
         report(issues)
         logger.lifecycle(

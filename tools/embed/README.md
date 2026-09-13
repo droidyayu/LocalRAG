@@ -50,10 +50,10 @@ localRag {
         enabled.set(true)
         dimensions.set(256)
         modelId.set("embeddinggemma-300m-seq256")
-        sidecarCommand.set(
+        sidecarExecutable.set(rootProject.file("tools/embed/.venv/bin/python").absolutePath)
+        sidecarScript.set(rootProject.file("tools/embed/embed.py"))
+        sidecarArguments.set(
             listOf(
-                rootProject.file("tools/embed/.venv/bin/python").absolutePath,
-                rootProject.file("tools/embed/embed.py").absolutePath,
                 "--model", "/absolute/path/to/embeddinggemma-300m-seq256.litertlm",
                 "--dimensions", "256",
             ),

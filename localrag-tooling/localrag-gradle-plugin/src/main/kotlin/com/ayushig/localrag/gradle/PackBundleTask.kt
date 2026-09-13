@@ -114,7 +114,9 @@ abstract class PackBundleTask : DefaultTask() {
                 vectors = if (embedding == null) null else vectorValues.toFloatArray(),
                 clusters = clusters(),
                 contentVersion = contentVersion.get(),
-                builtAt = Instant.EPOCH.toString(),
+                // Real build time. Byte-comparability between builds is explicitly out:
+                // the golden test pins builtAt to a fixed value instead.
+                builtAt = Instant.now().toString(),
                 embedding = embedding,
             )
         }

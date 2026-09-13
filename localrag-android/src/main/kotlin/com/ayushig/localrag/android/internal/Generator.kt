@@ -2,6 +2,7 @@ package com.ayushig.localrag.android.internal
 
 import com.ayushig.localrag.android.Passage
 import com.google.ai.edge.litertlm.Backend
+import java.util.concurrent.atomic.AtomicBoolean
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -45,10 +46,19 @@ internal class Generator private constructor(
         conversation = null
     }
 
+    /**
+     * Idempotent: unload paths call this more than once, and the process slot must be released
+     * exactly once per acquired engine.
+     */
     override fun close() {
-        reset()
-        runCatching { engine.close() }
+        if (closed.compareAndSet(false, true)) {
+            reset()
+            runCatching { engine.close() }
+            EngineSlot.release()
+        }
     }
+
+    private val closed = AtomicBoolean(false)
 
     private fun newConversation(): Conversation = engine.createConversation(
         ConversationConfig(
@@ -71,22 +81,33 @@ internal class Generator private constructor(
             systemInstruction: String,
             maxOutputTokens: Int,
             onFailure: (String) -> Unit,
-        ): Generator? = try {
-            val engine = Engine(
-                EngineConfig(
-                    modelPath = modelPath,
-                    backend = Backend.CPU(),
-                    cacheDir = cacheDir,
-                ),
-            )
-            engine.initialize()
-            Generator(engine, systemInstruction, maxOutputTokens)
-        } catch (failure: LiteRtLmJniException) {
-            onFailure("generation engine failed to load: ${failure.message}")
-            null
-        } catch (failure: IllegalStateException) {
-            onFailure("generation engine failed to load: ${failure.message}")
-            null
+        ): Generator? {
+            if (!EngineSlot.acquire()) {
+                onFailure(
+                    "a generation engine already exists in this process; refusing a second " +
+                        "instance and falling back to extractive answers",
+                )
+                return null
+            }
+            return try {
+                val engine = Engine(
+                    EngineConfig(
+                        modelPath = modelPath,
+                        backend = Backend.CPU(),
+                        cacheDir = cacheDir,
+                    ),
+                )
+                engine.initialize()
+                Generator(engine, systemInstruction, maxOutputTokens)
+            } catch (failure: LiteRtLmJniException) {
+                EngineSlot.release()
+                onFailure("generation engine failed to load: ${failure.message}")
+                null
+            } catch (failure: IllegalStateException) {
+                EngineSlot.release()
+                onFailure("generation engine failed to load: ${failure.message}")
+                null
+            }
         }
     }
 }

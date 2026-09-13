@@ -184,14 +184,6 @@ class LocalRag private constructor(
         }
     }
 
-    private fun metrics(retrievalMs: Long, generationMs: Long, passages: List<Passage>) =
-        QueryMetrics(
-            retrievalMs = retrievalMs,
-            generationMs = generationMs,
-            candidateCount = bundle?.manifest?.chunkCount ?: 0,
-            passageCount = passages.size,
-        )
-
     fun release() {
         runCatching { context.unregisterComponentCallbacks(memoryCallback) }
         unloadModels()

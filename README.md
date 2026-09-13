@@ -34,17 +34,18 @@ that data leaving the device.
 
 ## Current state
 
-Early. The repository is an Android Compose scaffold:
+The repository holds two things: the **LocalRAG library** (`localrag-tooling/localrag-core`,
+`localrag-tooling/localrag-gradle-plugin`, `localrag-android` — see `AGENTS.md`) and the **demo
+app** (`:app`), which is the library's first consumer:
 
-- `MainActivity.kt` — `NavigationSuiteScaffold` with three placeholder destinations (Home,
-  Favorites, Profile) rendering a `Greeting` placeholder.
-- `ui/theme/` — Material 3 theme, color, and type definitions.
-- No fintech screens, no assistant, no retrieval pipeline yet.
+- Fintech UI — portfolio home and category detail screens backed by repository data.
+- Assistant — a chat surface answering portfolio questions from formatted data (figures are
+  rendered, never generated) and documentation questions through the library's retrieval and
+  generation pipeline, with a pushed Gemma model.
+- Documentation search screen driving the library's `retrieveOnly`, plus a Markdown corpus in
+  `app/src/main/docs` that the Gradle plugin indexes into the app bundle at build time.
 
-The navigation destinations are scaffold defaults and will be replaced by real fintech
-destinations. The scaffold does **not** yet follow the layer structure below — the existing
-`ui/theme` package moves under `presentation/`, and the `domain` and `data` layers are still to be
-created.
+The app follows the layer structure below, except it uses `ui/` rather than `presentation/`.
 
 ## Architecture
 
@@ -118,26 +119,27 @@ use case → `AssistantRepository` → retrieve from the local knowledge index a
 state → assemble context → generate a grounded answer → back out as UI state with the source
 references the answer was built from.
 
-**Open decisions:**
+**Decided, and built:**
 
-- DI framework (Hilt is the default assumption for `di/`) — not yet wired up
-- Local persistence choice (Room vs. alternatives) for app state
-- Embedding model and on-device inference runtime
-- Vector store / similarity search implementation
-- Whether generation runs fully on-device or the retrieved context is sent to a hosted model
-  (which would change the privacy story — see *Why on-device*)
-- Where the knowledge corpus lives and how it is updated
+- DI framework — Hilt, wired up in `di/`
+- Embedding model and on-device inference runtime — EmbeddingGemma + Gemma 3 270M on LiteRT-LM,
+  pinned to the same version at build time and on device
+- Vector store — brute-force dot product over normalized vectors in `localrag-core`, no database
+- Generation runs fully on-device; retrieved context never leaves the phone
+- The knowledge corpus lives in the host app (`app/src/main/docs`) and is indexed by the
+  `com.ayushig.localrag` Gradle plugin into `assets/localrag/docs.localrag` at build time
 
 ## Tech stack
 
 | | |
 |---|---|
-| Language | Kotlin 2.2.10 |
-| Architecture | MVVM + Clean Architecture (`presentation` / `domain` / `data`) |
+| Language | Kotlin 2.3.20 |
+| Architecture | MVVM + Clean Architecture (`ui` / `domain` / `data`) |
 | UI | Jetpack Compose, Material 3 (`NavigationSuiteScaffold` for adaptive layout) |
 | Build | Gradle (Kotlin DSL), AGP 9.3.2, version catalog in `gradle/libs.versions.toml` |
-| SDK | `minSdk` 24, `targetSdk` / `compileSdk` 37 |
-| Package | `com.ayushig.localrag` |
+| SDK | `minSdk` 26, `targetSdk` / `compileSdk` 37 |
+| Package | `com.ayushig.localrag.demo` (library: `com.ayushig.localrag`) |
+| On-device AI | LiteRT-LM 0.17.0 (generation + embeddings) |
 
 ## Building
 
@@ -152,17 +154,27 @@ Or open the project in Android Studio and run the `app` configuration.
 
 ## Current layout
 
-What exists on disk today. See *Architecture* above for the package structure this is moving to.
+What exists on disk today. The library modules are documented in `AGENTS.md`.
 
 ```
-app/src/main/java/com/ayushig/localrag/
-├── MainActivity.kt          # entry point, navigation scaffold
-└── ui/theme/                # Material 3 theme, color, typography
+app/src/main/java/com/ayushig/localrag/demo/
+├── core/                    # shared formatting (figures are rendered, never generated)
+├── domain/                  # entities, repository interfaces, use cases — no Android imports
+│   ├── model/               # portfolio + assistant models
+│   └── usecase/             # one public `invoke` each (AskAssistant, portfolio queries…)
+├── data/                    # repository implementations, local stores, DTOs + mappers
+├── di/                      # Hilt modules (LocalRagModule provides the singleton LocalRag)
+└── ui/                      # screens, ViewModels, navigation, theme
+    ├── chat/                # assistant surface, streams LocalRag.query()
+    ├── docs/                # documentation search over retrieveOnly()
+    └── portfolio/           # home + category detail screens
+app/src/main/docs/           # Markdown corpus indexed by the plugin at build time
+app/src/main/localrag-clusters.json  # precomputed (human-written) answers
 ```
 
 ## Conventions
 
-- New code goes in `presentation` / `domain` / `data` — nothing new under `ui/`.
+- New code goes in `ui` / `domain` / `data`, following the existing packages.
 - A Compose screen takes UI state and event lambdas as parameters; it does not reach for a
   ViewModel itself beyond the top-level route composable.
 - One use case per user-meaningful operation, named as a verb phrase (`GetAccountSummary`,
