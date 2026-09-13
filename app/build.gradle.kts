@@ -6,13 +6,13 @@ plugins {
 }
 
 android {
-    namespace = "com.ayushig.localrag"
+    namespace = "com.ayushig.localrag.demo"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.ayushig.localrag"
+        applicationId = "com.ayushig.localrag.demo"
         // java.time is used across the portfolio models; it needs API 26 without desugaring.
         minSdk = 26
         targetSdk = 37

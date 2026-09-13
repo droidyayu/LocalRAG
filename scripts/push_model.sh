@@ -11,7 +11,7 @@
 set -euo pipefail
 
 MODEL_NAME="gemma3-270m-it-q8.litertlm"
-APPLICATION_ID="com.ayushig.localrag"
+APPLICATION_ID="com.ayushig.localrag.demo"
 MIN_BYTES=$((200 * 1024 * 1024))
 
 SOURCE="${1:-$MODEL_NAME}"
