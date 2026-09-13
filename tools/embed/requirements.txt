@@ -1,4 +1,4 @@
-# Pinned so every developer machine and CI runner embeds identically. A drift here changes the
-# vectors without changing the documentation, which the manifest parity check cannot catch.
-sentence-transformers==6.0.1
-torch==2.14.0
+# Pinned to the same version as litertlm-android in gradle/libs.versions.toml. Build-time and
+# runtime embeddings must come from the same engine, or the vectors in the bundle describe a
+# different space from the queries the phone produces.
+litert-lm-api==0.17.0

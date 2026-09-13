@@ -28,34 +28,51 @@ licence, which is what the plugin tests and the demo app use.
 
 ## Real vectors
 
-Python 3.14 is supported: torch 2.14.0 and onnxruntime 1.30.0 both publish cp314 macOS arm64
-wheels, and sentence-transformers is pure Python.
+`embed.py` runs on LiteRT-LM, the same runtime the Android app uses. `litert-lm-api` and
+`litertlm-android` ship the same version, expose the same `EmbeddingEngine`, consume the same
+model file and apply normalization and output truncation the same way. A different embedding
+stack at build time would produce vectors describing a different space from the queries the phone
+generates, and nothing would error - retrieval would just get quietly worse.
+
+Python 3.14 is supported: `litert-lm-api` publishes `py3-none` wheels for macOS arm64, Linux
+x86_64 and aarch64, Windows and Android, and declares `>=3.10`.
 
 ```bash
 python3 -m venv tools/embed/.venv
 tools/embed/.venv/bin/pip install -r tools/embed/requirements.txt
 ```
 
-The model is gated. Accept the licence at huggingface.co/google/embeddinggemma-300m and
-authenticate with `huggingface-cli login` before the first run.
-
-Then point the plugin at it:
+Then supply an EmbeddingGemma model and point the plugin at it:
 
 ```kotlin
 localRag {
     embedding {
         enabled.set(true)
         dimensions.set(256)
+        modelId.set("embeddinggemma-300m-seq256")
         sidecarCommand.set(
             listOf(
                 rootProject.file("tools/embed/.venv/bin/python").absolutePath,
                 rootProject.file("tools/embed/embed.py").absolutePath,
+                "--model", "/absolute/path/to/embeddinggemma-300m-seq256.litertlm",
                 "--dimensions", "256",
             ),
         )
     }
 }
 ```
+
+`--dimensions` sets the output size through `EmbeddingOptions`. EmbeddingGemma is Matryoshka
+trained, so a shorter vector is a supported trade rather than a truncation we invented, and 256
+floats per chunk keeps `vectors.bin` small enough to ship in an APK.
+
+### Open question: model format
+
+`litert-community/embeddinggemma-300m` currently publishes `.tflite` files only, one per sequence
+length and accelerator, with no `.litertlm`. The Python wrapper does not validate the extension -
+the path goes straight to the native layer - so whether `EmbeddingEngine` accepts a bare `.tflite`
+is unverified. Settle it when the model is first downloaded; if it does not, the model needs
+converting to `.litertlm` first.
 
 ## Why the prefixes matter
 
