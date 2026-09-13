@@ -18,3 +18,8 @@ local.properties
 .env
 .env.*
 !.env.example
+
+# Large local model artifacts; download and push separately, never commit.
+*.litertlm
+/gemma3-270m-it-q8.litertlm
+/RZCY40Q8W4Z

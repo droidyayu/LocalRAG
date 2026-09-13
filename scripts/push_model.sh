@@ -23,9 +23,15 @@ if [[ -n "$SERIAL" ]]; then
 fi
 
 if [[ ! -f "$SOURCE" ]]; then
-  echo "Model not found at: $SOURCE" >&2
-  echo "Download it from https://huggingface.co/litert-community/gemma-3-270m-it" >&2
-  exit 1
+  if [[ -n "${HF_TOKEN:-}" ]]; then
+    echo "Model not found at: $SOURCE. Downloading via curl using HF_TOKEN..."
+    curl -L -H "Authorization: Bearer $HF_TOKEN" -o "$SOURCE" "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.litertlm"
+  else
+    echo "Model not found at: $SOURCE" >&2
+    echo "Download it from https://huggingface.co/litert-community/gemma-3-270m-it" >&2
+    echo "Or set the HF_TOKEN environment variable to download it automatically." >&2
+    exit 1
+  fi
 fi
 
 SIZE=$(wc -c < "$SOURCE" | tr -d ' ')
