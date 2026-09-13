@@ -3,6 +3,31 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    id("com.ayushig.localrag")
+}
+
+// Documentation lives in the app, not the library. The plugin indexes it at build time and packs
+// the result into assets/localrag/docs.localrag.
+localRag {
+    docsDir.set(layout.projectDirectory.dir("src/main/docs"))
+    outputAssetDir.set("localrag")
+    categories.set(listOf("orders", "account", "funds", "charges", "kyc"))
+    screenUriPattern.set("^app://[a-z0-9/-]+$")
+    staleAfterDays.set(365)
+    maxChunkTokens.set(400)
+    contentVersion.set(1)
+
+    embedding {
+        // Off by default: a vector-less bundle is a supported runtime state, and turning this on
+        // needs the sidecar toolchain described in tools/embed/README.md.
+        // Flip with -PlocalRagEmbed=true to exercise the embedding path.
+        val embed = providers.gradleProperty("localRagEmbed").orNull == "true"
+        enabled.set(embed)
+        dimensions.set(256)
+        sidecarCommand.set(
+            listOf("python3", rootProject.file("tools/embed/hash_embed.py").absolutePath, "--dimensions", "256"),
+        )
+    }
 }
 
 android {

@@ -16,6 +16,7 @@ navigation = "2.10.1"
 kotlinxSerialization = "1.11.0"
 
 [libraries]
+android-gradle-api = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

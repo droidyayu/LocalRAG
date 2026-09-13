@@ -1,0 +1,4 @@
+# Pinned so every developer machine and CI runner embeds identically. A drift here changes the
+# vectors without changing the documentation, which the manifest parity check cannot catch.
+sentence-transformers==6.0.1
+torch==2.14.0

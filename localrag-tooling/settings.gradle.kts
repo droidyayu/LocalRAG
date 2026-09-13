@@ -14,6 +14,14 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // The Android Gradle plugin API is published to Google Maven, not Central.
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
     }
     versionCatalogs {
@@ -27,3 +35,4 @@ dependencyResolutionManagement {
 rootProject.name = "localrag-tooling"
 
 include(":localrag-core")
+include(":localrag-gradle-plugin")
