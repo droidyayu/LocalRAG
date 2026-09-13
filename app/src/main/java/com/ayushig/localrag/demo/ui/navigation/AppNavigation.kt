@@ -1,11 +1,7 @@
 package com.ayushig.localrag.demo.ui.navigation
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -13,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.ayushig.localrag.demo.ui.chat.ChatRoute
+import com.ayushig.localrag.demo.ui.docs.DocsSearchRoute
 import com.ayushig.localrag.demo.ui.portfolio.detail.CategoryDetailRoute as CategoryDetailScreenRoute
 import com.ayushig.localrag.demo.ui.portfolio.home.PortfolioHomeRoute
 
@@ -48,14 +45,8 @@ fun AppNavHost(
         }
 
         composable(ProfileRoute.ROUTE) {
-            Placeholder("Profile")
+            // The docs surface lives here until the demo app grows a real profile screen.
+            DocsSearchRoute(modifier = Modifier.fillMaxSize())
         }
-    }
-}
-
-@Composable
-private fun Placeholder(label: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = "$label coming later", style = MaterialTheme.typography.bodyMedium)
     }
 }
