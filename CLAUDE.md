@@ -1,63 +1,80 @@
 # LocalRAG — working notes
 
-Android app: a **fintech app UI** plus an embedded **assistant** that answers FAQ and
-app/account-status questions ("why is my transfer pending?", "is my KYC complete?", "what are the
-transfer limits?"). Answers are grounded in a local knowledge index plus the user's on-device app
-state — hence *Local* + *RAG*.
+Two things live here:
 
-See `README.md` for the full picture. This file is the short version for working in the repo.
+1. **LocalRAG**, a reusable Android library that answers help and FAQ questions fully on-device
+   from Markdown documentation owned by the host app.
+2. **A demo app** (`:app`) — a fintech UI plus an assistant — that is the library first consumer
+   and the place the library is exercised on a real device.
 
-## Architecture: MVVM + Clean Architecture
+See `README.md` for the product picture and `tools/embed/README.md` for the embedding sidecar.
 
-Dependencies point inward. `presentation` → `domain` ← `data`. `domain` depends on nothing.
+## Layout
 
 ```
-com.ayushig.localrag/
-├── di/            # DI modules
-├── core/          # shared utils, Result/error types, common UI
-├── domain/        # model/ · repository/ (interfaces) · usecase/     ← pure Kotlin
-├── data/          # local/ · remote/ · dto/ · mapper/ · repository/  ← *RepositoryImpl
-└── presentation/  # theme/ · navigation/ · <feature>/ (Screen + ViewModel + UiState)
+LocalRAG/
+├── settings.gradle.kts         includeBuild("localrag-tooling"); :app, :localrag-android
+├── localrag-tooling/           an included build, isolated from the root
+│   ├── localrag-core/          pure Kotlin/JVM. No Android, no LiteRT, no Gradle API
+│   └── localrag-gradle-plugin/ plugin id com.ayushig.localrag
+├── localrag-android/           the AAR, namespace com.ayushig.localrag.android
+├── app/                        demo host, com.ayushig.localrag.demo
+└── tools/embed/                embedding sidecar scripts
 ```
+
+A Gradle plugin cannot be applied by a sibling project in the same build, and `buildSrc` cannot be
+published, so the plugin and the core it shares with the runtime sit in an included build.
+`:localrag-android` depends on `com.ayushig.localrag:localrag-core:0.1.0` and Gradle substitutes
+the included project.
 
 ## Rules
 
-- **No Android imports in `domain`.** If a domain file needs `android.*`, the abstraction belongs
-  in `data` or `presentation`.
-- **ViewModels call use cases**, never repositories or data sources directly.
-- **One use case per operation**, verb-phrase named, single public `operator fun invoke`.
-- **Screens are stateless**: they take an immutable UI state + event lambdas. Only the top-level
-  route composable touches the ViewModel. UI state is exposed as `StateFlow`.
-- **DTOs stay in `data`.** Map DTO ↔ domain entity in `data/mapper`; domain types never expose DTOs.
-- Repository interface in `domain/repository`, implementation in `data/repository` suffixed `Impl`.
-- Assistant answers carry source references in the domain model so the UI can show what grounded
-  them.
+- **`localrag-core` takes no Android and no LiteRT dependency, ever.** It is shared by the build
+  plugin and the runtime, and that shared code is the only thing guaranteeing an index built on CI
+  matches queries typed on a phone. A drift there does not error, it quietly degrades retrieval.
+- **The model never produces a number.** Figures come from data and are rendered by shared
+  formatting code. This holds for the demo app portfolio answers today and for library generation
+  when it lands.
+- **No LiteRT type crosses the `LocalRag` public API.** Model paths go in as strings.
+- **BM25-only is a supported state, not a broken build.** A bundle with no vectors and no
+  embedding block in its manifest is correct output.
+- The manifest embedding block is a parity contract: any mismatch drops the vectors and falls back
+  to BM25 rather than silently retrieving from a different vector space.
+- Build-time and runtime embeddings use the same LiteRT-LM version, pinned together in
+  `gradle/libs.versions.toml` and `tools/embed/requirements.txt`.
+- Validation messages name the file and the line. Content authors are not engineers.
+- Plugin code is configuration-cache safe: no `Project` at execution time, injected
+  `ExecOperations`, every task property annotated.
+
+### Demo app
+
+MVVM plus clean architecture, `presentation` → `domain` ← `data`, domain depends on nothing. The
+app uses `ui/` rather than `presentation/`. ViewModels call use cases, never repositories. Screens
+are stateless and take an immutable state plus event lambdas.
 
 ## Current state
 
-Fresh Compose scaffold only — `MainActivity.kt` with a `NavigationSuiteScaffold` (placeholder
-Home/Favorites/Profile destinations, `Greeting` placeholder) and `ui/theme/`. No fintech screens,
-no assistant, no retrieval pipeline.
+Phases 1 to 3 are done: core, plugin, and on-device BM25 retrieval with zero models. The demo app
+ships a 53-chunk bundle in its assets and a documentation search screen driving `retrieveOnly`.
 
-The layer packages above **do not exist yet**. When adding code: create the layer package it
-belongs in, and put new UI under `presentation/` — not under the existing `ui/`, which is slated to
-move to `presentation/theme/`.
-
-## Not yet decided
-
-DI framework (assume Hilt unless told otherwise), local persistence, embedding model, on-device
-inference runtime, vector store, whether generation is on-device or hosted. Ask rather than pick
-one of these unilaterally.
+Not built yet: the embedder (phase 4), the output gate and generation (phase 5), precomputed
+cluster answers (phase 6), the evaluation harness (phase 7). The LiteRT-LM generation spike in the
+demo app assistant still runs on a fake echo repository because the Gemma model was never pushed.
 
 ## Build
 
 ```bash
-./gradlew assembleDebug
-./gradlew installDebug
-./gradlew test
-./gradlew connectedAndroidTest   # device required
+./gradlew :app:assembleDebug            # builds core, plugin, bundle and app in one invocation
+./gradlew :app:generateLocalRagBundle   # bundle only
+./gradlew -p localrag-tooling :localrag-core:test
+./gradlew :localrag-android:testDebugUnitTest
+./gradlew publishToMavenLocal           # plus -p localrag-tooling for core and the plugin
 ```
 
-Kotlin 2.2.10 · AGP 9.3.2 · Compose BOM 2025.12.00 · minSdk 24 · target/compileSdk 37.
-Dependencies go through the version catalog at `gradle/libs.versions.toml` — add the version and
-library entries there, then reference via `libs.*` in `app/build.gradle.kts`.
+Add `-PlocalRagEmbed=true` to exercise the embedding path with the deterministic hash sidecar.
+
+Kotlin 2.3.20 · AGP 9.3.2 · Gradle 9.5 · Compose BOM 2025.12.00 · minSdk 26 · target/compileSdk 37.
+`localrag-core` compiles on JDK 17 but emits Java 11 bytecode, because the Android consumers
+declare Java 11 and a variant advertising 17 would fail their resolution.
+
+Dependencies go through `gradle/libs.versions.toml`. The included build loads the same catalog.
