@@ -19,6 +19,10 @@ data class ChatUiState(
     val libraryVersion: String = "",
     val errorMessage: String? = null,
 ) {
+    /**
+     * Account questions are answered from repository data, so sending does not wait for the
+     * model. Only general chat needs a loaded engine.
+     */
     val canSend: Boolean
-        get() = input.isNotBlank() && !isGenerating && engineState is EngineState.Ready
+        get() = input.isNotBlank() && !isGenerating
 }

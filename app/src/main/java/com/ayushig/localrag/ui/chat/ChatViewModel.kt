@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ayushig.localrag.BuildConfig
 import com.ayushig.localrag.domain.model.ChatMessage
+import com.ayushig.localrag.domain.model.MessageSource
+import com.ayushig.localrag.domain.model.assistant.AnswerResult
 import com.ayushig.localrag.domain.model.EngineState
 import com.ayushig.localrag.domain.model.GenerationChunk
 import com.ayushig.localrag.domain.model.GenerationSettings
 import com.ayushig.localrag.domain.model.Role
 import com.ayushig.localrag.domain.repository.LlmRepository
 import com.ayushig.localrag.domain.usecase.ApplySettingsUseCase
+import com.ayushig.localrag.domain.usecase.assistant.AnswerPortfolioQueryUseCase
 import com.ayushig.localrag.domain.usecase.GenerateReplyUseCase
 import com.ayushig.localrag.domain.usecase.InitializeEngineUseCase
 import com.ayushig.localrag.domain.usecase.ResetConversationUseCase
@@ -34,6 +37,7 @@ class ChatViewModel @Inject constructor(
     private val generateReply: GenerateReplyUseCase,
     private val resetConversation: ResetConversationUseCase,
     private val applySettings: ApplySettingsUseCase,
+    private val answerPortfolioQuery: AnswerPortfolioQueryUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState(libraryVersion = BuildConfig.LITERTLM_VERSION))
@@ -102,12 +106,36 @@ class ChatViewModel @Inject constructor(
         )
 
         generationJob = viewModelScope.launch {
-            // Collect off the main thread; only the resulting state hops back to Main.
-            generateReply(prompt)
-                .flowOn(Dispatchers.IO)
-                .onCompletion { finishStreaming(replyId) }
-                .collect { chunk -> applyChunk(replyId, chunk) }
+            // Account questions are answered from repository data, never by the model. Only
+            // what the rules cannot route falls through to generation.
+            when (val answer = answerPortfolioQuery(prompt)) {
+                is AnswerResult.Answer -> streamPortfolioText(replyId, answer.text)
+                is AnswerResult.Refusal -> streamPortfolioText(replyId, answer.text)
+                is AnswerResult.Failure -> streamPortfolioText(replyId, answer.text)
+                AnswerResult.NoMatch -> generateWithModel(replyId, prompt)
+            }
         }
+    }
+
+    private suspend fun generateWithModel(replyId: String, prompt: String) {
+        // Collect off the main thread; only the resulting state hops back to Main.
+        generateReply(prompt)
+            .flowOn(Dispatchers.IO)
+            .onCompletion { finishStreaming(replyId) }
+            .collect { chunk -> applyChunk(replyId, chunk) }
+    }
+
+    /**
+     * Templated answers are streamed a word at a time so they read like the model's replies.
+     * The text is already complete before the first word appears; the delay is presentation only.
+     */
+    private suspend fun streamPortfolioText(replyId: String, text: String) {
+        updateMessage(replyId) { it.copy(source = MessageSource.PORTFOLIO_DATA) }
+        text.split(" ").forEachIndexed { index, word ->
+            updateMessage(replyId) { it.copy(text = if (index == 0) word else it.text + " " + word) }
+            delay(PORTFOLIO_WORD_DELAY_MS)
+        }
+        finishStreaming(replyId)
     }
 
     private fun applyChunk(replyId: String, chunk: GenerationChunk) {
@@ -160,6 +188,10 @@ class ChatViewModel @Inject constructor(
     fun onSettingsChange(settings: GenerationSettings) {
         _uiState.value = _uiState.value.copy(settings = settings)
         viewModelScope.launch { applySettings(settings) }
+    }
+
+    private companion object {
+        const val PORTFOLIO_WORD_DELAY_MS = 35L
     }
 
     override fun onCleared() {

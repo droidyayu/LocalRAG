@@ -1,7 +1,11 @@
 package com.ayushig.localrag.di
 
 import com.ayushig.localrag.data.FakeEchoLlmRepository
+import com.ayushig.localrag.data.assistant.KeywordIntentResolver
+import com.ayushig.localrag.data.assistant.TemplatePortfolioAnswerRenderer
 import com.ayushig.localrag.data.repository.FakePortfolioRepository
+import com.ayushig.localrag.domain.assistant.IntentResolver
+import com.ayushig.localrag.domain.assistant.PortfolioAnswerRenderer
 import com.ayushig.localrag.domain.repository.LlmRepository
 import com.ayushig.localrag.domain.repository.PortfolioRepository
 import dagger.Binds
@@ -23,4 +27,14 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindPortfolioRepository(impl: FakePortfolioRepository): PortfolioRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindIntentResolver(impl: KeywordIntentResolver): IntentResolver
+
+    @Binds
+    @Singleton
+    abstract fun bindPortfolioAnswerRenderer(
+        impl: TemplatePortfolioAnswerRenderer,
+    ): PortfolioAnswerRenderer
 }

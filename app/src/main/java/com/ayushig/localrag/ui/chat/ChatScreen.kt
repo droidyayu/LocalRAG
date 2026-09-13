@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ayushig.localrag.domain.model.ChatMessage
 import com.ayushig.localrag.domain.model.EngineState
 import com.ayushig.localrag.domain.model.GenerationMetrics
+import com.ayushig.localrag.domain.model.MessageSource
 import com.ayushig.localrag.domain.model.GenerationSettings
 import com.ayushig.localrag.domain.model.Role
 
@@ -80,17 +81,14 @@ fun ChatScreen(
     onRetryModelCheck: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (!uiState.modelPresent) {
-        ModelMissingScreen(
-            expectedPath = uiState.expectedModelPath,
-            onRetry = onRetryModelCheck,
-            modifier = modifier,
-        )
-        return
-    }
-
     val listState = rememberLazyListState()
-    LaunchedEffect(uiState.messages.size, uiState.messages.lastOrNull()?.text) {
+    // The source label appears when streaming ends, which grows the last item without changing
+    // its text, so isStreaming has to be part of the key or the label lands below the fold.
+    LaunchedEffect(
+        uiState.messages.size,
+        uiState.messages.lastOrNull()?.text,
+        uiState.messages.lastOrNull()?.isStreaming,
+    ) {
         if (uiState.messages.isNotEmpty()) listState.animateScrollToItem(uiState.messages.lastIndex)
     }
 
@@ -119,6 +117,12 @@ fun ChatScreen(
         },
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            if (!uiState.modelPresent) {
+                ModelMissingBanner(
+                    expectedPath = uiState.expectedModelPath,
+                    onRetry = onRetryModelCheck,
+                )
+            }
             EngineBanner(uiState)
 
             LazyColumn(
@@ -199,6 +203,14 @@ private fun MessageRow(message: ChatMessage) {
                     text = message.text + if (message.isStreaming) "▌" else "",
                     modifier = Modifier.padding(10.dp),
                     style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (message.source == MessageSource.PORTFOLIO_DATA && !message.isStreaming) {
+                Text(
+                    text = "from your account",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, start = 4.dp),
                 )
             }
             message.metrics?.let { MetricsLine(it) }
