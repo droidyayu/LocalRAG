@@ -205,13 +205,26 @@ private fun MessageRow(message: ChatMessage) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (message.source == MessageSource.PORTFOLIO_DATA && !message.isStreaming) {
+            if (!message.isStreaming && message.source != MessageSource.MODEL) {
                 Text(
-                    text = "from your account",
+                    text = when (message.source) {
+                        MessageSource.PORTFOLIO_DATA -> "from your account"
+                        MessageSource.DOCUMENTATION -> "from the help documentation"
+                        MessageSource.MODEL -> ""
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp, start = 4.dp),
                 )
+                // Naming the passages is what lets a wrong answer be traced to the wrong source.
+                message.sources.take(2).forEach { source ->
+                    Text(
+                        text = "· " + source,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
             }
             message.metrics?.let { MetricsLine(it) }
         }

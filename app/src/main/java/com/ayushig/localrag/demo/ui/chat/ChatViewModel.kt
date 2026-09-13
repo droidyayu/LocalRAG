@@ -12,6 +12,8 @@ import com.ayushig.localrag.demo.domain.model.GenerationSettings
 import com.ayushig.localrag.demo.domain.model.Role
 import com.ayushig.localrag.demo.domain.repository.LlmRepository
 import com.ayushig.localrag.demo.domain.usecase.ApplySettingsUseCase
+import com.ayushig.localrag.android.AnswerChunk
+import com.ayushig.localrag.android.LocalRag
 import com.ayushig.localrag.demo.domain.usecase.assistant.AnswerPortfolioQueryUseCase
 import com.ayushig.localrag.demo.domain.usecase.GenerateReplyUseCase
 import com.ayushig.localrag.demo.domain.usecase.InitializeEngineUseCase
@@ -38,6 +40,7 @@ class ChatViewModel @Inject constructor(
     private val resetConversation: ResetConversationUseCase,
     private val applySettings: ApplySettingsUseCase,
     private val answerPortfolioQuery: AnswerPortfolioQueryUseCase,
+    private val localRag: LocalRag,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState(libraryVersion = BuildConfig.LITERTLM_VERSION))
@@ -48,6 +51,9 @@ class ChatViewModel @Inject constructor(
     private var loadTimerJob: Job? = null
 
     init {
+        // The documentation index is the answer path for anything that is not an account
+        // question, so it has to be loading from the moment the screen exists.
+        viewModelScope.launch { localRag.initialize() }
         viewModelScope.launch {
             repository.engineState.collect { state ->
                 _uiState.value = _uiState.value.copy(engineState = state)
@@ -112,9 +118,39 @@ class ChatViewModel @Inject constructor(
                 is AnswerResult.Answer -> streamPortfolioText(replyId, answer.text)
                 is AnswerResult.Refusal -> streamPortfolioText(replyId, answer.text)
                 is AnswerResult.Failure -> streamPortfolioText(replyId, answer.text)
-                AnswerResult.NoMatch -> generateWithModel(replyId, prompt)
+                // Not an account question, so ask the documentation index before the model.
+                AnswerResult.NoMatch -> if (!answerFromDocs(replyId, prompt)) {
+                    generateWithModel(replyId, prompt)
+                }
             }
         }
+    }
+
+    /**
+     * Answers from the shipped documentation. Returns false when nothing was retrieved, so the
+     * caller can fall through to the model rather than showing an empty reply.
+     */
+    private suspend fun answerFromDocs(replyId: String, prompt: String): Boolean {
+        var text: String? = null
+        var titles: List<String> = emptyList()
+
+        localRag.query(prompt).collect { chunk ->
+            when (chunk) {
+                is AnswerChunk.Sources -> titles = chunk.passages.map { passage ->
+                    listOfNotNull(passage.title, passage.heading).joinToString(" — ")
+                }
+                is AnswerChunk.Token -> text = (text ?: "") + chunk.text
+                is AnswerChunk.Error -> text = null
+                is AnswerChunk.Done -> Unit
+            }
+        }
+
+        val answer = text?.takeIf { it.isNotBlank() } ?: return false
+        updateMessage(replyId) {
+            it.copy(source = MessageSource.DOCUMENTATION, sources = titles)
+        }
+        streamWords(replyId, answer)
+        return true
     }
 
     private suspend fun generateWithModel(replyId: String, prompt: String) {
@@ -131,6 +167,10 @@ class ChatViewModel @Inject constructor(
      */
     private suspend fun streamPortfolioText(replyId: String, text: String) {
         updateMessage(replyId) { it.copy(source = MessageSource.PORTFOLIO_DATA) }
+        streamWords(replyId, text)
+    }
+
+    private suspend fun streamWords(replyId: String, text: String) {
         text.split(" ").forEachIndexed { index, word ->
             updateMessage(replyId) { it.copy(text = if (index == 0) word else it.text + " " + word) }
             delay(PORTFOLIO_WORD_DELAY_MS)

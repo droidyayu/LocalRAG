@@ -28,6 +28,15 @@ class KeywordIntentResolver @Inject constructor(
         // Advice is refused even when the question also names a holding, so it runs first.
         if (text.matches(words, ADVICE)) return PortfolioIntent.AdviceRequest
 
+        // A question about what something means or how to do it is a documentation question,
+        // even when it mentions margin or gold. Only a first-person signal makes it a question
+        // about this account. Without this, every occurrence of an asset word would be answered
+        // with a balance, and the help corpus would be unreachable.
+        if (text.matches(words, ALWAYS_DOCUMENTATION)) return PortfolioIntent.Unknown
+        if (text.matches(words, DOCUMENTATION_UNLESS_PERSONAL) && !text.matches(words, PERSONAL)) {
+            return PortfolioIntent.Unknown
+        }
+
         if (text.matches(words, MARGIN_STATUS)) return PortfolioIntent.MarginStatus
         if (text.matches(words, AVAILABLE_BALANCE)) return PortfolioIntent.AvailableBalance
         if (text.matches(words, BEST_PERFORMER)) return PortfolioIntent.BestPerformer
@@ -69,6 +78,36 @@ class KeywordIntentResolver @Inject constructor(
         }
 
     companion object {
+        /**
+         * Openers that are informational whatever else the question contains. "Where is my gold
+         * stored" is about vault policy, not about a balance, even though it says "my".
+         */
+        val ALWAYS_DOCUMENTATION = listOf(
+            "where is", "where are", "how do i", "how does", "how can i", "how to",
+            "how long does", "which documents", "what documents", "explain",
+            "difference between", "why does", "tell me about", "can i", "do i need",
+            "when does", "what happens",
+        )
+
+        /**
+         * Openers that ask what something is, unless the question is possessive. "What is margin"
+         * is documentation; "what is my portfolio worth" is a balance.
+         */
+        val DOCUMENTATION_UNLESS_PERSONAL = listOf(
+            "what is", "what are", "what does", "what do you mean", "how is",
+        )
+
+        /**
+         * Signals that a question is about this account rather than the product.
+         *
+         * A bare "i" is deliberately absent: "how do i close a position" is a procedural question
+         * the documentation answers, not a request for a balance. Only possession, or a phrase
+         * that asks about what the user holds, counts.
+         */
+        val PERSONAL = listOf(
+            "my", "mine", "our", "am i", "do i have", "i own", "i hold", "i have", "i am",
+        )
+
         val ADVICE = listOf(
             "should i", "should we", "shall i", "worth buying", "worth selling",
             "good time to", "right time to", "recommend", "recommendation",
