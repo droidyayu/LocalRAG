@@ -13,3 +13,8 @@ build/
 .externalNativeBuild
 .cxx
 local.properties
+
+# Secrets. HF_TOKEN lives here; never commit it.
+.env
+.env.*
+!.env.example
