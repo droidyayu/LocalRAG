@@ -16,6 +16,8 @@ localRag {
     staleAfterDays.set(365)
     maxChunkTokens.set(400)
     contentVersion.set(1)
+    // Answers written by a human, matched before retrieval. Optional: absent is normal.
+    clustersFile.set(layout.projectDirectory.file("src/main/localrag-clusters.json"))
 
     embedding {
         // Off by default: a vector-less bundle is a supported runtime state, and turning this on

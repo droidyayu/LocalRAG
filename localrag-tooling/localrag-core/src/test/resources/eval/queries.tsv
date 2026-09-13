@@ -1,0 +1,106 @@
+# query<TAB>expected document id. Written as a user would ask, not as the document is titled.
+what is a gtt order	gtt-order-basics
+standing order explained	gtt-order-basics
+good till triggered	gtt-order-basics
+how do i place a gtt	gtt-order-basics
+how long does a gtt last	gtt-order-basics
+does a gtt use margin	gtt-order-basics
+trigger order setup	gtt-order-basics
+what is a market order	order-types
+difference between limit and market	order-types
+what is a stop loss	order-types
+limit order not filling	order-types
+bracket order	order-types
+types of orders	order-types
+why is my order still pending	order-pending
+my order is stuck	order-pending
+order not executed	order-pending
+can i cancel a pending order	order-pending
+does cancelling cost anything	order-pending
+open order sitting there	order-pending
+why was my order rejected	order-rejected
+order rejection reasons	order-rejected
+rms rejection	order-rejected
+not enough funds for order	order-rejected
+price band breach	order-rejected
+instrument blocked for intraday	order-rejected
+how does margin work	margin-basics
+what is margin level	margin-basics
+what is a margin call	margin-basics
+is margin a fee	margin-basics
+when is margin released	margin-basics
+leverage explained	margin-basics
+is my kyc complete	kyc-status
+kyc verification status	kyc-status
+how long is kyc review	kyc-status
+kyc action needed	kyc-status
+can i trade before kyc	kyc-status
+identity check pending	kyc-status
+which documents do i need for kyc	kyc-documents
+proof of address	kyc-documents
+proof of identity	kyc-documents
+can i use a passport	kyc-documents
+utility bill accepted	kyc-documents
+photo quality for documents	kyc-documents
+my kyc document was rejected	kyc-rejected
+why was my document rejected	kyc-rejected
+can i resubmit documents	kyc-rejected
+verification failed	kyc-rejected
+expired document uploaded	kyc-rejected
+how do i add funds	deposit-funds
+deposit money	deposit-funds
+top up my account	deposit-funds
+bank transfer deposit	deposit-funds
+card deposit timing	deposit-funds
+third party payment	deposit-funds
+how do i withdraw	withdraw-funds
+withdrawal to my bank	withdraw-funds
+how long does a withdrawal take	withdraw-funds
+cash out my balance	withdraw-funds
+why would a withdrawal be held	withdraw-funds
+payout account name	withdraw-funds
+why is my withdrawal pending	withdrawal-pending
+withdrawal delayed	withdrawal-pending
+money not received yet	withdrawal-pending
+daily cut off for payouts	withdrawal-pending
+available balance versus equity	withdrawal-pending
+bank side delay	withdrawal-pending
+what do i pay to trade	brokerage-charges
+brokerage charges	brokerage-charges
+commission per order	brokerage-charges
+is a cancelled order charged	brokerage-charges
+exchange turnover charges	brokerage-charges
+where do i see what i paid	brokerage-charges
+overnight financing	overnight-charges
+swap charge	overnight-charges
+cost of holding a position overnight	overnight-charges
+rollover time	overnight-charges
+is financing on margin or notional	overnight-charges
+currency conversion charge	currency-conversion
+fx charge on trades	currency-conversion
+converting between currencies	currency-conversion
+how do i download a statement	statement-download
+contract note	statement-download
+tax report download	statement-download
+how long are contract notes kept	statement-download
+two factor authentication	two-factor-auth
+set up 2fa	two-factor-auth
+otp not arriving	two-factor-auth
+lost my authenticator device	two-factor-auth
+recovery code login	two-factor-auth
+how do i close my account	close-account
+deactivate my account	close-account
+can i close with an open position	close-account
+what happens to my statements after closing	close-account
+add a bank account	update-bank-account
+change my bank details	update-bank-account
+remove a bank account	update-bank-account
+payout account verification	update-bank-account
+where is my gold stored	gold-storage
+allocated bullion	gold-storage
+can i take physical delivery	gold-storage
+is my silver insured	gold-storage
+how do managed portfolios work	managed-portfolios
+what does moderate risk mean	managed-portfolios
+withdraw from a managed portfolio	managed-portfolios
+adding to a wealth portfolio	managed-portfolios

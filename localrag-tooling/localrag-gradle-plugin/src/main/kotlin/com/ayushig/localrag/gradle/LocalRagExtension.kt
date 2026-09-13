@@ -1,6 +1,7 @@
 package com.ayushig.localrag.gradle
 
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Nested
@@ -35,6 +36,9 @@ abstract class EmbeddingSpec {
 
 abstract class LocalRagExtension {
     abstract val docsDir: DirectoryProperty
+
+    /** Optional JSON array of precomputed answers, matched before retrieval at runtime. */
+    abstract val clustersFile: RegularFileProperty
 
     /** Subdirectory of assets the bundle is written into. */
     abstract val outputAssetDir: Property<String>

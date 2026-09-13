@@ -1,9 +1,15 @@
 package com.ayushig.localrag.android
 
 import android.content.Context
+import android.util.Log
 import com.ayushig.localrag.android.internal.BundleLoader
+import com.ayushig.localrag.android.internal.Generator
+import com.ayushig.localrag.android.internal.PromptBuilder
+import com.ayushig.localrag.android.internal.QueryEmbedder
 import com.ayushig.localrag.android.internal.Retriever
 import com.ayushig.localrag.android.internal.SignatureVerifier
+import com.ayushig.localrag.core.answer.ClusterMatcher
+import com.ayushig.localrag.core.answer.OutputGate
 import com.ayushig.localrag.core.bundle.Bundle
 import com.ayushig.localrag.core.index.VectorIndex
 import java.io.File
@@ -40,7 +46,10 @@ class LocalRag private constructor(
         val generationModelPath: String? = null,
         val cacheDir: File,
         val appVersion: String,
+        /** Checked against the bundle manifest; a mismatch drops the vectors. */
+        val embeddingModelId: String? = null,
         val maxContextTokens: Int = 1200,
+        val maxOutputTokens: Int = 256,
         val topK: Int = 4,
         val categories: Set<String> = emptySet(),
         val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
@@ -52,6 +61,9 @@ class LocalRag private constructor(
 
     private var bundle: Bundle? = null
     private var retriever: Retriever? = null
+    private var embedder: QueryEmbedder? = null
+    private var generator: Generator? = null
+    private var clusters: ClusterMatcher? = null
 
     suspend fun initialize() {
         if (_state.value is LocalRagState.Ready) return
@@ -60,16 +72,19 @@ class LocalRag private constructor(
         withContext(Dispatchers.IO) {
             runCatching {
                 val loaded = BundleLoader(context, config.bundleAssetPath, signatureVerifier).load()
+                embedder = createEmbedder(loaded.bundle)
                 val vectors = usableVectors(loaded.bundle)
+                generator = createGenerator()
+
                 bundle = loaded.bundle
                 retriever = Retriever(loaded.bundle, vectors, config.appVersion)
+                clusters = ClusterMatcher(loaded.bundle.clusters)
 
                 _state.value = LocalRagState.Ready(
                     chunkCount = loaded.bundle.manifest.chunkCount,
                     contentVersion = loaded.bundle.manifest.contentVersion,
                     usingVectors = vectors != null,
-                    // Generation lands in a later phase; the flag already tells the truth.
-                    canGenerate = false,
+                    canGenerate = generator != null,
                 )
             }.onFailure { failure ->
                 _state.value = LocalRagState.Failed(failure.message ?: "could not load the bundle")
@@ -109,46 +124,120 @@ class LocalRag private constructor(
         )
         val retrievalMs = System.currentTimeMillis() - retrievalStart
 
-        // Sources first, always. The host app can render a card in a few hundred milliseconds
-        // while any text streams underneath.
+        // Sources first, always. Retrieval takes milliseconds and generation does not, so the
+        // host app can render a source card while text arrives underneath.
         emit(AnswerChunk.Sources(passages))
 
-        if (passages.isEmpty()) {
-            emit(
-                AnswerChunk.Done(
-                    QueryMetrics(retrievalMs, 0, 0, 0),
-                    AnswerMode.EXTRACTIVE,
-                ),
-            )
+        // A precomputed answer was written by a human and beats anything generated when it fits.
+        // Matched by BM25, so it works on a device with no models at all.
+        val cluster = clusters?.match(text)
+        if (cluster != null) {
+            emit(AnswerChunk.Token(cluster.answer))
+            emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.PRECOMPUTED))
             return@flow
         }
 
-        // Extractive until a generator exists: the best passage, verbatim, which can be wrong for
-        // the question but can never invent a number.
-        val answer = passages.first().text
-        emit(AnswerChunk.Token(answer))
-        emit(
-            AnswerChunk.Done(
-                QueryMetrics(
-                    retrievalMs = retrievalMs,
-                    generationMs = 0,
-                    candidateCount = bundle?.manifest?.chunkCount ?: 0,
-                    passageCount = passages.size,
-                ),
-                AnswerMode.EXTRACTIVE,
-            ),
-        )
+        if (passages.isEmpty()) {
+            emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.EXTRACTIVE))
+            return@flow
+        }
+
+        val activeGenerator = generator
+        if (activeGenerator != null) {
+            val generationStart = System.currentTimeMillis()
+            val generated = activeGenerator.generate(
+                PromptBuilder.build(text, passages, config.maxContextTokens),
+            )
+            val generationMs = System.currentTimeMillis() - generationStart
+
+            // Buffered and checked before a single token is shown. A wrong figure that has
+            // already been displayed cannot be withdrawn.
+            val verdict = generated?.let {
+                OutputGate.check(it, passages.map { passage -> passage.text })
+            }
+            if (generated != null && verdict is OutputGate.Verdict.Allowed) {
+                emit(AnswerChunk.Token(generated))
+                emit(
+                    AnswerChunk.Done(
+                        metrics(retrievalMs, generationMs, passages),
+                        AnswerMode.GENERATED,
+                    ),
+                )
+                return@flow
+            }
+            if (verdict is OutputGate.Verdict.Rejected) {
+                Log.w(TAG, "generated answer rejected: ${verdict.reason} (${verdict.detail})")
+            }
+        }
+
+        // Extractive fallback: the best passage, verbatim. It can be the wrong passage for the
+        // question, but it cannot invent a number.
+        emit(AnswerChunk.Token(passages.first().text))
+        emit(AnswerChunk.Done(metrics(retrievalMs, 0, passages), AnswerMode.EXTRACTIVE))
     }.flowOn(Dispatchers.IO)
 
+    /** Clears the conversation without discarding the engine, which would cost seconds to reload. */
+    fun resetConversation() {
+        generator?.reset()
+    }
+
+    /**
+     * Drops both models but keeps the bundle, so the library keeps answering extractively.
+     * Call from onTrimMemory(TRIM_MEMORY_COMPLETE).
+     */
+    fun unloadModels() {
+        embedder?.close()
+        embedder = null
+        generator?.close()
+        generator = null
+        bundle?.let { retriever = Retriever(it, null, config.appVersion) }
+        (_state.value as? LocalRagState.Ready)?.let { ready ->
+            _state.value = ready.copy(usingVectors = false, canGenerate = false)
+        }
+    }
+
+    private fun metrics(retrievalMs: Long, generationMs: Long, passages: List<Passage>) =
+        QueryMetrics(
+            retrievalMs = retrievalMs,
+            generationMs = generationMs,
+            candidateCount = bundle?.manifest?.chunkCount ?: 0,
+            passageCount = passages.size,
+        )
+
     fun release() {
+        unloadModels()
         retriever = null
+        clusters = null
         bundle = null
         _state.value = LocalRagState.Idle
         scope.cancel()
     }
 
-    /** Null until an embedder is wired in, which keeps retrieval on the BM25 path. */
-    private fun embedQuery(text: String): FloatArray? = null
+    private fun embedQuery(text: String): FloatArray? = embedder?.embed(text)
+
+    private fun createEmbedder(bundle: Bundle): QueryEmbedder? {
+        val modelPath = config.embeddingModelPath ?: return null
+        val embedding = bundle.manifest.embedding ?: run {
+            Log.w(TAG, "an embedding model is configured but the bundle carries no vectors")
+            return null
+        }
+        return QueryEmbedder.createIfCompatible(
+            modelPath = modelPath,
+            cacheDir = config.cacheDir.path,
+            embedding = embedding,
+            configuredModelId = config.embeddingModelId,
+        ) { reason -> Log.w(TAG, reason) }
+    }
+
+    private fun createGenerator(): Generator? {
+        val modelPath = config.generationModelPath ?: return null
+        return Generator.createOrNull(
+            modelPath = modelPath,
+            cacheDir = config.cacheDir.path,
+            systemInstruction = config.systemInstruction,
+            maxOutputTokens = config.maxOutputTokens,
+        ) { reason -> Log.w(TAG, reason) }
+    }
 
     /**
      * The parity contract. A bundle built with different prefixes, dimensions or model produces
@@ -159,15 +248,16 @@ class LocalRag private constructor(
         val vectors = bundle.vectors ?: return null
         val embedding = bundle.manifest.embedding ?: return null
 
-        if (config.embeddingModelPath == null) {
-            // Vectors present but no embedder to match a query against them. Not a fault: one
-            // bundle serves every device tier.
-            return null
-        }
+        // Vectors are only usable once an embedder exists that provably matches them. Without
+        // one they are dead weight in the bundle, which is fine: one bundle serves every tier.
+        val active = embedder ?: return null
+        if (active.dimensions != embedding.dimensions) return null
         return VectorIndex(vectors, embedding.dimensions)
     }
 
     companion object {
+        private const val TAG = "LocalRag"
+
         const val DEFAULT_SYSTEM_INSTRUCTION: String =
             "You are a help assistant inside an app. Answer only using the information given to " +
                 "you. Keep answers under three sentences. If the information does not cover the " +

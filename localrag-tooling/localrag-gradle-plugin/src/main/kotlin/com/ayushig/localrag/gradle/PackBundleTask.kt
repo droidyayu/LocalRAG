@@ -1,6 +1,7 @@
 package com.ayushig.localrag.gradle
 
 import com.ayushig.localrag.core.bundle.BundleWriter
+import com.ayushig.localrag.core.bundle.Cluster
 import com.ayushig.localrag.core.bundle.EmbeddingInfo
 import com.ayushig.localrag.core.document.Chunk
 import com.ayushig.localrag.core.index.VectorIndex
@@ -10,10 +11,12 @@ import kotlinx.serialization.json.Json
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
@@ -37,6 +40,11 @@ abstract class PackBundleTask : DefaultTask() {
     @get:InputDirectory
     @get:Optional
     abstract val vectorsDir: DirectoryProperty
+
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:InputFile
+    @get:Optional
+    abstract val clustersFile: RegularFileProperty
 
     @get:OutputDirectory
     abstract val assetDir: DirectoryProperty
@@ -104,7 +112,7 @@ abstract class PackBundleTask : DefaultTask() {
                 output = output,
                 chunks = chunks,
                 vectors = if (embedding == null) null else vectorValues.toFloatArray(),
-                clusters = emptyList(),
+                clusters = clusters(),
                 contentVersion = contentVersion.get(),
                 builtAt = Instant.EPOCH.toString(),
                 embedding = embedding,
@@ -114,8 +122,16 @@ abstract class PackBundleTask : DefaultTask() {
         logger.lifecycle(
             "LocalRAG: wrote ${bundle.name}, ${chunks.size} chunks, " +
                 (if (embedding == null) "BM25 only" else "with ${embedding.dimensions}d vectors") +
+                ", ${clusters().size} precomputed answers" +
                 ", ${bundle.length()} bytes",
         )
+    }
+
+    /** Answers written ahead of time. Absent is normal; the runtime simply never matches one. */
+    private fun clusters(): List<Cluster> {
+        val file = clustersFile.orNull?.asFile ?: return emptyList()
+        if (!file.isFile) return emptyList()
+        return JSON.decodeFromString<List<Cluster>>(file.readText())
     }
 
     private fun embeddingInfo(): EmbeddingInfo? {

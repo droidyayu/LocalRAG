@@ -1,0 +1,23 @@
+[
+  {
+    "id": "withdrawal-timing",
+    "questions": [
+      "how long does a withdrawal take",
+      "when will my withdrawal arrive",
+      "when do i get my money",
+      "withdrawal settlement time"
+    ],
+    "answer": "Most withdrawals settle within two working days. A request made outside banking hours starts on the next working day.",
+    "chunkIds": ["withdraw-funds#how-long-it-takes", "withdrawal-pending#processing-window"]
+  },
+  {
+    "id": "kyc-review-timing",
+    "questions": [
+      "how long does kyc review take",
+      "when will my kyc be approved",
+      "how long until my documents are verified"
+    ],
+    "answer": "A submitted document is usually reviewed within two working days, and you cannot trade until the review completes.",
+    "chunkIds": ["kyc-status#in-review"]
+  }
+]

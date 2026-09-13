@@ -14,6 +14,10 @@ android {
 
     defaultConfig {
         minSdk = 26
+        // LiteRT-LM ships native libraries for arm64-v8a and x86_64 only.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     compileOptions {
@@ -33,6 +37,7 @@ dependencies {
     // implementation: Passage and the bundle types are part of this modules public surface.
     api("com.ayushig.localrag:localrag-core:0.1.0")
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.litertlm.android)
     testImplementation(libs.junit)
 }
 

@@ -53,6 +53,7 @@ class LocalRagPlugin : Plugin<Project> {
                 task.vectorsDir.set(embed.flatMap { it.vectorsDir })
                 task.dependsOn(embed)
             }
+            task.clustersFile.set(extension.clustersFile)
             task.assetDir.set(buildDir.dir("localrag/assets"))
             task.assetSubdirectory.set(extension.outputAssetDir)
             task.contentVersion.set(extension.contentVersion)
