@@ -3,8 +3,53 @@ package com.ayushig.localrag.android
 /** Where a passage came from in the retrieval pipeline. */
 enum class MatchSource { BM25, VECTOR, HYBRID, PRECOMPUTED }
 
-/** How an answer was produced. */
-enum class AnswerMode { PRECOMPUTED, GENERATED, EXTRACTIVE }
+/**
+ * A function the agent may call, defined and implemented by the host app. The SDK plans the
+ * calls and judges the results; everything domain-specific — what the function reads, how
+ * figures are rendered — lives app-side.
+ *
+ * @param argSpec short usage text shown to the model, e.g. "category=METALS, STOCKS, WEALTH or LEVERAGED".
+ * @param execute runs the function. Null means misuse or a failed read: the turn ends honestly.
+ */
+data class ToolDefinition(
+    val name: String,
+    val description: String,
+    val argSpec: String,
+    val execute: suspend (args: Map<String, String>) -> ToolResult?,
+)
+
+/** One executed tool call, ready to paste back into the model's context. */
+data class ToolResult(
+    val tool: String,
+    val text: String,
+    val sourceTitles: List<String> = emptyList(),
+)
+
+/**
+ * Everything the agent loop needs from the host app. Prompts, tool set, and policy copy are
+ * configuration: the SDK owns the grammar, the rounds, and the output gate, but no words.
+ */
+data class AgentConfig(
+    val systemPrompt: String,
+    val tools: List<ToolDefinition>,
+    val maxToolRounds: Int = 3,
+    val maxConversationalChars: Int = 200,
+)
+
+/** What an agent turn produced. The host app renders Final and shows fixed text for the rest. */
+sealed interface AgentOutcome {
+    data class Final(
+        val text: String,
+        val sources: List<String>,
+        val usedTools: List<String>,
+    ) : AgentOutcome
+
+    /** Malformed output, failed tools, or a gate rejection: say the fixed fallback instead. */
+    data object Unresolved : AgentOutcome
+
+    /** Advisory language in the final text: show the fixed refusal instead. */
+    data object Refused : AgentOutcome
+}
 
 /**
  * One retrieved section of documentation, ready to show.
@@ -22,27 +67,6 @@ data class Passage(
     val score: Float,
     val source: MatchSource,
 )
-
-data class QueryMetrics(
-    val retrievalMs: Long,
-    val generationMs: Long,
-    val candidateCount: Int,
-    val passageCount: Int,
-)
-
-sealed interface AnswerChunk {
-    /**
-     * Emitted first, before any token. Retrieval is fast and generation is not, so the host app
-     * can render a source card immediately and stream text underneath it.
-     */
-    data class Sources(val passages: List<Passage>) : AnswerChunk
-
-    data class Token(val text: String) : AnswerChunk
-
-    data class Done(val metrics: QueryMetrics, val mode: AnswerMode) : AnswerChunk
-
-    data class Error(val message: String) : AnswerChunk
-}
 
 sealed interface LocalRagState {
     data object Idle : LocalRagState

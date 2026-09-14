@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# Pushes the Gemma 3 270M IT LiteRT-LM model onto a connected device.
+# Pushes the Gemma 4 E2B IT LiteRT-LM model onto a connected device.
 #
-# The model is deliberately not bundled in the APK: at ~304 MB it would break the build.
-# Download it manually from https://huggingface.co/litert-community/gemma-3-270m-it after
-# accepting the Gemma license. The repo is gated, so a scripted download returns an HTML error
-# page rather than the model — this script checks the file size before pushing.
+# The model is deliberately not bundled in the APK: at ~2 GB it would break the build.
+# Download it manually from https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm
+# after accepting the Gemma license. The repo is gated, so a scripted download returns an HTML
+# error page rather than the model — this script checks the file size before pushing.
 #
 # Usage: scripts/push_model.sh [path-to-model] [adb-serial]
+# The exact published filename may differ; override with MODEL_NAME=... if it does. It must
+# match ModelFileLocator.MODEL_FILE_NAME or the app will not see the pushed file.
 
 set -euo pipefail
 
-MODEL_NAME="gemma3-270m-it-q8.litertlm"
+MODEL_NAME="${MODEL_NAME:-gemma-4-E2B-it.litertlm}"
+HF_REPO="litert-community/gemma-4-E2B-it-litert-lm"
 APPLICATION_ID="com.ayushig.localrag.demo"
 MIN_BYTES=$((200 * 1024 * 1024))
 
@@ -25,10 +28,10 @@ fi
 if [[ ! -f "$SOURCE" ]]; then
   if [[ -n "${HF_TOKEN:-}" ]]; then
     echo "Model not found at: $SOURCE. Downloading via curl using HF_TOKEN..."
-    curl -L -H "Authorization: Bearer $HF_TOKEN" -o "$SOURCE" "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.litertlm"
+    curl -L -H "Authorization: Bearer $HF_TOKEN" -o "$SOURCE" "https://huggingface.co/${HF_REPO}/resolve/main/${MODEL_NAME}"
   else
     echo "Model not found at: $SOURCE" >&2
-    echo "Download it from https://huggingface.co/litert-community/gemma-3-270m-it" >&2
+    echo "Download it from https://huggingface.co/${HF_REPO}" >&2
     echo "Or set the HF_TOKEN environment variable to download it automatically." >&2
     exit 1
   fi

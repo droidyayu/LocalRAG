@@ -55,7 +55,7 @@ fun ModelMissingBanner(
                     fontFamily = FontFamily.Monospace,
                 )
                 Text(
-                    text = "Download it from huggingface.co/litert-community/gemma-3-270m-it " +
+                    text = "Download it from huggingface.co/litert-community/gemma-4-E2B-it-litert-lm " +
                         "after accepting the Gemma license, and check the file size before " +
                         "trusting it.",
                     style = MaterialTheme.typography.labelSmall,

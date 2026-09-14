@@ -21,6 +21,6 @@ object AssistantRoute {
     const val ROUTE = "assistant"
 }
 
-object ProfileRoute {
-    const val ROUTE = "profile"
+object RetrievalRoute {
+    const val ROUTE = "retrieval"
 }

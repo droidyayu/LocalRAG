@@ -25,6 +25,6 @@ class ModelFileLocator @Inject constructor(
     fun isPresent(): Boolean = modelFile.isFile && modelFile.length() > 0L
 
     companion object {
-        const val MODEL_FILE_NAME: String = "gemma3-270m-it-q8.litertlm"
+        const val MODEL_FILE_NAME: String = "gemma-4-E2B-it.litertlm"
     }
 }

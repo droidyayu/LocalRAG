@@ -1,40 +1,47 @@
 package com.ayushig.localrag.demo.di
 
-import com.ayushig.localrag.demo.data.FakeEchoLlmRepository
-import com.ayushig.localrag.demo.data.assistant.KeywordIntentResolver
-import com.ayushig.localrag.demo.data.assistant.TemplatePortfolioAnswerRenderer
+import com.ayushig.localrag.android.AgentConfig
+import com.ayushig.localrag.android.LocalRag
+import com.ayushig.localrag.demo.data.assistant.AGENT_SYSTEM_PROMPT
+import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
 import com.ayushig.localrag.demo.data.repository.FakePortfolioRepository
-import com.ayushig.localrag.demo.domain.assistant.IntentResolver
-import com.ayushig.localrag.demo.domain.assistant.PortfolioAnswerRenderer
-import com.ayushig.localrag.demo.domain.repository.LlmRepository
 import com.ayushig.localrag.demo.domain.repository.PortfolioRepository
-import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class AppModule {
-
-    // Phase 1 wiring. Phase 3 swaps this binding for the LiteRT-LM backed repository.
-    @Binds
-    @Singleton
-    abstract fun bindLlmRepository(impl: FakeEchoLlmRepository): LlmRepository
+object AppModule {
 
     // Hardcoded portfolio data. Swapped for a real source once one exists.
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindPortfolioRepository(impl: FakePortfolioRepository): PortfolioRepository
+    fun bindPortfolioRepository(impl: FakePortfolioRepository): PortfolioRepository = impl
 
-    @Binds
+    /**
+     * The agent's tools, built by hand: the tool executors take a suspend function Hilt cannot
+     * provide as a binding, so Dagger builds the whole object and only sees concrete types.
+     */
+    @Provides
     @Singleton
-    abstract fun bindIntentResolver(impl: KeywordIntentResolver): IntentResolver
+    fun provideAssistantToolDefinitions(
+        repository: PortfolioRepository,
+        localRag: LocalRag,
+    ): AssistantToolDefinitions =
+        AssistantToolDefinitions(repository) { query -> localRag.retrieveOnly(query) }
 
-    @Binds
+    /**
+     * Everything the SDK agent loop needs from the host app: prompt copy plus the tools above.
+     * The SDK owns the grammar, the rounds, and the output gate, but no words.
+     */
+    @Provides
     @Singleton
-    abstract fun bindPortfolioAnswerRenderer(
-        impl: TemplatePortfolioAnswerRenderer,
-    ): PortfolioAnswerRenderer
+    fun provideAgentConfig(definitions: AssistantToolDefinitions): AgentConfig =
+        AgentConfig(
+            systemPrompt = AGENT_SYSTEM_PROMPT,
+            tools = definitions.list(),
+        )
 }

@@ -58,6 +58,17 @@ All seven phases are implemented. The demo app answers portfolio questions from 
 documentation questions through the library, with generation running on a pushed Gemma model (see
 `scripts/push_model.sh`) and a documentation search screen driving `retrieveOnly`.
 
+Architecture split: the SDK is a stateless engine. It hosts LiteRT-LM, loads bundles,
+retrieves, generates one-shot answers on fresh per-call conversations, runs the output gate, and
+provides the configurable agent runner (`runAgent(query, AgentConfig)`); its only shared mutable
+state is the single-flight guard, and loaded models/bundle are read-only resources. All business
+logic lives in the app: tool definitions and figure rendering (`AssistantToolDefinitions`),
+prompt copy (`AGENT_SYSTEM_PROMPT` in `AgentPrompts.kt`), transcript labels, and all UI. The
+keyword router, templates, echo-era engine shims, and settings debug UI are deleted — with no
+model on device the assistant says it has no information rather than guessing. The composed
+precomputed → generated → extractive pipeline is deleted with them: uncalled after the agent
+cutover, docs Q&A now runs through `runAgent` with the host app's tools.
+
 - **Embedder (phase 4).** Neither candidate from the original plan: LiteRT-LM ships an
   `EmbeddingEngine`, so runtime queries embed through it (`QueryEmbedder`) and build-time
   embedding runs through the same engine via `tools/embed/embed.py` on `litert-lm-api`, pinned to
@@ -67,15 +78,15 @@ documentation questions through the library, with generation running on a pushed
   NONE.
 - **Generation (phase 5).** The output gate runs buffered before any token is emitted, in that
   order as specified. One `Engine` per process is enforced by `EngineSlot` (a second creation is
-  refused and falls back to extractive); one in-flight query at a time is enforced by
-  `AnswerPipeline` (a new query cancels the previous). Both models unload on
-  `onTrimMemory(TRIM_MEMORY_COMPLETE)` and the library keeps answering extractively.
+  refused); one in-flight call at a time is enforced by `SingleFlight` (a new call cancels the
+  previous). Both models unload on `onTrimMemory(TRIM_MEMORY_COMPLETE)` and the library keeps
+  retrieving from BM25.
 - **Clusters (phase 6).** `clustersFile` feeds precomputed answers matched by BM25 over the
   questions, so they work with no models loaded.
 - **Eval (phase 7).** `queries.tsv` (~105 queries) asserts hit-rate@1 ≥ 70% and hit-rate@4 ≥ 85%;
   plus a golden byte-identical bundle test, a BM25 snapshot round-trip parity test, and a printed
-  fixture ranking for human review. The degradation matrix is asserted on the JVM with fake models
-  (`DegradationMatrixTest`), deliberately instead of instrumented tests.
+  fixture ranking for human review. Degradation behavior (BM25-only, no generator) is expressed in
+  the `Ready` state flags rather than a separate matrix, deliberately instead of instrumented tests.
 
 Recorded deviations from the original plan: the extension splits `sidecarCommand` into
 `sidecarExecutable` / `sidecarScript` / `sidecarArguments` (the script is a content-tracked file

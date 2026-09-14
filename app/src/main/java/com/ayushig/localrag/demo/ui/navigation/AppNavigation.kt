@@ -44,8 +44,8 @@ fun AppNavHost(
             ChatRoute(modifier = Modifier.fillMaxSize())
         }
 
-        composable(ProfileRoute.ROUTE) {
-            // The docs surface lives here until the demo app grows a real profile screen.
+        composable(RetrievalRoute.ROUTE) {
+            // The retrieval-accuracy surface: raw retrieveOnly results, no generation.
             DocsSearchRoute(modifier = Modifier.fillMaxSize())
         }
     }

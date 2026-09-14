@@ -21,5 +21,5 @@ local.properties
 
 # Large local model artifacts; download and push separately, never commit.
 *.litertlm
-/gemma3-270m-it-q8.litertlm
+/gemma-4-E2B-it.litertlm
 /RZCY40Q8W4Z

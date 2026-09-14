@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -55,7 +55,13 @@ fun DocsSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
-        Text("Documentation search", style = MaterialTheme.typography.titleMedium)
+        Text("Retrieval", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Raw retrieveOnly results for judging retrieval accuracy — no generation.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
         Text(
             text = engineLine(uiState.engine),
             style = MaterialTheme.typography.labelSmall,
@@ -97,13 +103,15 @@ fun DocsSearchScreen(
             contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(uiState.passages, key = { it.chunkId }) { passage -> PassageCard(passage) }
+            itemsIndexed(uiState.passages, key = { _, passage -> passage.chunkId }) { rank, passage ->
+                PassageCard(rank = rank + 1, passage = passage)
+            }
         }
     }
 }
 
 @Composable
-private fun PassageCard(passage: Passage) {
+private fun PassageCard(rank: Int, passage: Passage) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
             Row(
@@ -132,7 +140,7 @@ private fun PassageCard(passage: Passage) {
                 modifier = Modifier.padding(top = 6.dp),
             )
             Text(
-                text = "%s  score %.2f".format(passage.chunkId, passage.score),
+                text = "#%d  %s  score %.2f".format(rank, passage.chunkId, passage.score),
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -149,5 +157,5 @@ private fun engineLine(state: LocalRagState): String = when (state) {
     is LocalRagState.Ready ->
         "${state.chunkCount} chunks - content v${state.contentVersion} - " +
             (if (state.usingVectors) "hybrid" else "BM25 only") + " - " +
-            (if (state.canGenerate) "generation on" else "extractive")
+            (if (state.canGenerate) "generation on" else "retrieval only")
 }

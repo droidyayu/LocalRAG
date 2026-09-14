@@ -4,29 +4,21 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
-import com.ayushig.localrag.android.internal.AnswerPipeline
 import com.ayushig.localrag.android.internal.BundleLoader
+import com.ayushig.localrag.android.internal.AgentRunner
 import com.ayushig.localrag.android.internal.Generator
-import com.ayushig.localrag.android.internal.PromptBuilder
 import com.ayushig.localrag.android.internal.QueryEmbedder
+import com.ayushig.localrag.android.internal.SingleFlight
 import com.ayushig.localrag.android.internal.Retriever
 import com.ayushig.localrag.android.internal.SignatureVerifier
-import com.ayushig.localrag.core.answer.ClusterMatcher
-import com.ayushig.localrag.core.answer.OutputGate
 import com.ayushig.localrag.core.bundle.Bundle
 import com.ayushig.localrag.core.bundle.EmbedderDescriptor
 import com.ayushig.localrag.core.index.VectorIndex
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
 /**
@@ -46,7 +38,7 @@ class LocalRag private constructor(
         val bundleAssetPath: String = "localrag/docs.localrag",
         /** Null means BM25-only retrieval. */
         val embeddingModelPath: String? = null,
-        /** Null means extractive answers: the best passage, verbatim. */
+        /** Null means no generation: agent turns fall back and only retrieval is available. */
         val generationModelPath: String? = null,
         val cacheDir: File,
         val appVersion: String,
@@ -56,7 +48,6 @@ class LocalRag private constructor(
          * compare the manifest to, and the parity check cannot do its job.
          */
         val embedder: EmbedderDescriptor? = null,
-        val maxContextTokens: Int = 1200,
         val maxOutputTokens: Int = 256,
         val topK: Int = 4,
         val categories: Set<String> = emptySet(),
@@ -65,8 +56,7 @@ class LocalRag private constructor(
 
     /**
      * Registered by the library rather than left to the host: a model that stays resident under
-     * memory pressure gets the whole app killed, and the fallback to extractive answers is
-     * invisible to the user anyway.
+     * memory pressure gets the whole app killed, and retrieval keeps working without it anyway.
      */
     private val memoryCallback = object : ComponentCallbacks2 {
         override fun onTrimMemory(level: Int) {
@@ -79,19 +69,23 @@ class LocalRag private constructor(
         override fun onLowMemory() = unloadModels()
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow<LocalRagState>(LocalRagState.Idle)
     val state: StateFlow<LocalRagState> = _state.asStateFlow()
 
     private var bundle: Bundle? = null
     private var retriever: Retriever? = null
     private var embedder: QueryEmbedder? = null
-    private var pipeline: AnswerPipeline? = null
     private var generator: Generator? = null
-    private var clusters: ClusterMatcher? = null
+
+    /**
+     * The only shared mutable state in the SDK: which coroutine currently owns the engine.
+     * Everything else hot here is a read-only resource (loaded bundle, models). Conversations
+     * are per-call and never retained, so calls are stateless beyond this guard.
+     */
+    private val flight = SingleFlight()
 
     suspend fun initialize() {
-        if (_state.value is LocalRagState.Ready) return
+        if (_state.value is LocalRagState.Ready || _state.value is LocalRagState.Loading) return
         _state.value = LocalRagState.Loading
         context.registerComponentCallbacks(memoryCallback)
 
@@ -103,23 +97,7 @@ class LocalRag private constructor(
                 generator = createGenerator()
 
                 bundle = loaded.bundle
-                val activeRetriever = Retriever(loaded.bundle, vectors, config.appVersion)
-                retriever = activeRetriever
-                val activeClusters = ClusterMatcher(loaded.bundle.clusters)
-                clusters = activeClusters
-                pipeline = AnswerPipeline(
-                    retriever = activeRetriever,
-                    clusters = activeClusters,
-                    embedder = embedder,
-                    generator = generator,
-                    topK = config.topK,
-                    categories = config.categories,
-                    maxContextTokens = config.maxContextTokens,
-                    chunkCount = loaded.bundle.manifest.chunkCount,
-                    onRejected = { verdict ->
-                        Log.w(TAG, "generated answer rejected: ${verdict.reason} (${verdict.detail})")
-                    },
-                )
+                retriever = Retriever(loaded.bundle, vectors, config.appVersion)
 
                 _state.value = LocalRagState.Ready(
                     chunkCount = loaded.bundle.manifest.chunkCount,
@@ -140,23 +118,33 @@ class LocalRag private constructor(
      * app team inspects a bad answer without the generator in the way.
      */
     suspend fun retrieveOnly(text: String): List<Passage> = withContext(Dispatchers.IO) {
-        pipeline?.retrieve(text).orEmpty()
-    }
-
-    fun query(text: String): Flow<AnswerChunk> {
-        val active = pipeline ?: return flow {
-            emit(AnswerChunk.Error("LocalRag is not initialized"))
-        }
-        return active.answer(text).flowOn(Dispatchers.IO)
-    }
-
-    /** Clears the conversation without discarding the engine, which would cost seconds to reload. */
-    fun resetConversation() {
-        generator?.reset()
+        retriever?.retrieve(
+            query = text,
+            topK = config.topK,
+            queryVector = embedder?.embed(text),
+            categories = config.categories,
+        ).orEmpty()
     }
 
     /**
-     * Drops both models but keeps the bundle, so the library keeps answering extractively.
+     * The configurable agent turn: the SDK plans tool calls in a strict grammar, executes the
+     * host app's [AgentConfig.tools], and gates the final text against the observations. All
+     * words — prompts, tools, policy — arrive in [config]; the SDK owns only the machinery.
+     * Stateless like everything else here: the transcript lives for this call alone.
+     */
+    suspend fun runAgent(query: String, config: AgentConfig): AgentOutcome =
+        withContext(Dispatchers.IO) {
+            flight.run {
+                AgentRunner().answer(
+                    generate = { prompt -> generator?.generate(prompt) },
+                    query = query,
+                    config = config,
+                )
+            }
+        }
+
+    /**
+     * Drops both models but keeps the bundle, so the library keeps retrieving from BM25.
      * Call from onTrimMemory(TRIM_MEMORY_COMPLETE).
      */
     fun unloadModels() {
@@ -164,20 +152,9 @@ class LocalRag private constructor(
         embedder = null
         generator?.close()
         generator = null
-        // Keep answering extractively from BM25 once the models are gone.
+        // Keep retrieving from BM25 once the models are gone.
         bundle?.let { loaded ->
-            val plain = Retriever(loaded, null, config.appVersion)
-            retriever = plain
-            pipeline = AnswerPipeline(
-                retriever = plain,
-                clusters = clusters ?: ClusterMatcher(loaded.clusters),
-                embedder = null,
-                generator = null,
-                topK = config.topK,
-                categories = config.categories,
-                maxContextTokens = config.maxContextTokens,
-                chunkCount = loaded.manifest.chunkCount,
-            )
+            retriever = Retriever(loaded, null, config.appVersion)
         }
         (_state.value as? LocalRagState.Ready)?.let { ready ->
             _state.value = ready.copy(usingVectors = false, canGenerate = false)
@@ -187,15 +164,10 @@ class LocalRag private constructor(
     fun release() {
         runCatching { context.unregisterComponentCallbacks(memoryCallback) }
         unloadModels()
-        pipeline = null
         retriever = null
-        clusters = null
         bundle = null
         _state.value = LocalRagState.Idle
-        scope.cancel()
     }
-
-    private fun embedQuery(text: String): FloatArray? = embedder?.embed(text)
 
     private fun createEmbedder(bundle: Bundle): QueryEmbedder? {
         val modelPath = config.embeddingModelPath ?: return null

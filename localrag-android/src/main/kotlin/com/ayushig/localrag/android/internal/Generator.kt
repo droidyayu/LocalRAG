@@ -1,6 +1,5 @@
 package com.ayushig.localrag.android.internal
 
-import com.ayushig.localrag.android.Passage
 import com.google.ai.edge.litertlm.Backend
 import java.util.concurrent.atomic.AtomicBoolean
 import com.google.ai.edge.litertlm.Contents
@@ -26,33 +25,32 @@ internal class Generator private constructor(
     private val engine: Engine,
     private val systemInstruction: String,
     private val maxOutputTokens: Int,
-) : TextGenerator {
+) {
 
-    private var conversation: Conversation? = null
-
-    /** Null on any failure, so the caller falls back to an extractive answer rather than an error. */
-    override suspend fun generate(prompt: String): String? = try {
-        val active = conversation ?: newConversation().also { conversation = it }
-        active.sendMessageAsync(prompt).toList().joinToString("") { it.toString() }
+    /**
+     * Null on any failure, so the caller falls back rather than erroring. Stateless: every
+     * call decodes on a fresh conversation that is closed before returning, so no turn can
+     * leak into the next answer. One engine per process; never a fresh engine per call.
+     */
+    suspend fun generate(prompt: String): String? = try {
+        val conversation = newConversation()
+        try {
+            conversation.sendMessageAsync(prompt).toList().joinToString("") { it.toString() }
+        } finally {
+            runCatching { conversation.close() }
+        }
     } catch (failure: LiteRtLmJniException) {
         null
     } catch (failure: IllegalStateException) {
         null
     }
 
-    /** A fresh conversation from the same engine. Never a fresh engine. */
-    override fun reset() {
-        runCatching { conversation?.close() }
-        conversation = null
-    }
-
     /**
      * Idempotent: unload paths call this more than once, and the process slot must be released
      * exactly once per acquired engine.
      */
-    override fun close() {
+    fun close() {
         if (closed.compareAndSet(false, true)) {
-            reset()
             runCatching { engine.close() }
             EngineSlot.release()
         }
@@ -85,7 +83,7 @@ internal class Generator private constructor(
             if (!EngineSlot.acquire()) {
                 onFailure(
                     "a generation engine already exists in this process; refusing a second " +
-                        "instance and falling back to extractive answers",
+                        "instance and running without a generator",
                 )
                 return null
             }
@@ -112,33 +110,3 @@ internal class Generator private constructor(
     }
 }
 
-/**
- * Builds the prompt: system instruction, the retrieved passages, the question. Nothing else, and
- * no conversation history, so the model has no opportunity to carry an earlier mistake forward.
- */
-internal object PromptBuilder {
-
-    fun build(query: String, passages: List<Passage>, maxContextTokens: Int): String {
-        val budget = maxContextTokens * APPROXIMATE_CHARACTERS_PER_TOKEN
-        val context = StringBuilder()
-        for ((index, passage) in passages.withIndex()) {
-            val block = buildString {
-                append(passage.title)
-                passage.heading?.let { append(" — ").append(it) }
-                append("\n").append(passage.text).append("\n\n")
-            }
-            if (context.length + block.length <= budget) {
-                context.append(block)
-                continue
-            }
-            // Never send a prompt with no documentation in it. A budget too small for even one
-            // passage truncates that passage instead of asking the model to answer from nothing.
-            if (index == 0) context.append(block.take(budget.coerceAtLeast(MINIMUM_CONTEXT_CHARS)))
-            break
-        }
-        return "Documentation:\n$context\nQuestion: $query"
-    }
-
-    private const val APPROXIMATE_CHARACTERS_PER_TOKEN = 4
-    private const val MINIMUM_CONTEXT_CHARS = 200
-}

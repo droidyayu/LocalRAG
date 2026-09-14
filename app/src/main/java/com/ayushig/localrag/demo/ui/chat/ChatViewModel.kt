@@ -5,45 +5,40 @@ import androidx.lifecycle.viewModelScope
 import com.ayushig.localrag.demo.BuildConfig
 import com.ayushig.localrag.demo.domain.model.ChatMessage
 import com.ayushig.localrag.demo.domain.model.MessageSource
-import com.ayushig.localrag.demo.domain.model.assistant.AnswerResult
-import com.ayushig.localrag.demo.domain.model.EngineState
-import com.ayushig.localrag.demo.domain.model.GenerationChunk
-import com.ayushig.localrag.demo.domain.model.GenerationSettings
 import com.ayushig.localrag.demo.domain.model.Role
-import com.ayushig.localrag.demo.domain.repository.LlmRepository
-import com.ayushig.localrag.demo.domain.usecase.ApplySettingsUseCase
-import com.ayushig.localrag.android.AnswerChunk
+import com.ayushig.localrag.android.AgentConfig
+import com.ayushig.localrag.android.AgentOutcome
 import com.ayushig.localrag.android.LocalRag
-import com.ayushig.localrag.demo.domain.usecase.assistant.AnswerPortfolioQueryUseCase
-import com.ayushig.localrag.demo.domain.usecase.GenerateReplyUseCase
-import com.ayushig.localrag.demo.domain.usecase.InitializeEngineUseCase
-import com.ayushig.localrag.demo.domain.usecase.ResetConversationUseCase
+import com.ayushig.localrag.android.LocalRagState
+import com.ayushig.localrag.demo.data.ModelFileLocator
+import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
+import com.ayushig.localrag.demo.domain.assistant.NoInformationFallback
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
+import android.util.Log
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val repository: LlmRepository,
-    private val initializeEngine: InitializeEngineUseCase,
-    private val generateReply: GenerateReplyUseCase,
-    private val resetConversation: ResetConversationUseCase,
-    private val applySettings: ApplySettingsUseCase,
-    private val answerPortfolioQuery: AnswerPortfolioQueryUseCase,
+    private val modelFileLocator: ModelFileLocator,
+    private val agentConfig: AgentConfig,
     private val localRag: LocalRag,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ChatUiState(libraryVersion = BuildConfig.LITERTLM_VERSION))
+    private val _uiState = MutableStateFlow(
+        ChatUiState(
+            libraryVersion = BuildConfig.LITERTLM_VERSION,
+            modelPresent = modelFileLocator.isPresent(),
+            expectedModelPath = modelFileLocator.absolutePath,
+        ),
+    )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     /** Only one generation may be in flight; a new send cancels the previous one. */
@@ -51,13 +46,13 @@ class ChatViewModel @Inject constructor(
     private var loadTimerJob: Job? = null
 
     init {
-        // The documentation index is the answer path for anything that is not an account
-        // question, so it has to be loading from the moment the screen exists.
+        // The engine is the only answer path, so it has to be loading from the moment the
+        // screen exists.
         viewModelScope.launch { localRag.initialize() }
         viewModelScope.launch {
-            repository.engineState.collect { state ->
+            localRag.state.collect { state ->
                 _uiState.value = _uiState.value.copy(engineState = state)
-                if (state !is EngineState.Loading) loadTimerJob?.cancel()
+                if (state !is LocalRagState.Loading) loadTimerJob?.cancel()
             }
         }
         loadEngine()
@@ -65,16 +60,16 @@ class ChatViewModel @Inject constructor(
 
     /** Lazy engine load, triggered by entering the chat screen rather than by Application. */
     fun loadEngine() {
-        val present = repository.isModelPresent()
+        val present = modelFileLocator.isPresent()
         _uiState.value = _uiState.value.copy(
             modelPresent = present,
-            expectedModelPath = repository.expectedModelPath,
+            expectedModelPath = modelFileLocator.absolutePath,
         )
         if (!present) return
-        if (_uiState.value.engineState is EngineState.Loading) return
+        if (_uiState.value.engineState is LocalRagState.Loading) return
 
         startLoadTimer()
-        viewModelScope.launch { initializeEngine() }
+        viewModelScope.launch { localRag.initialize() }
     }
 
     private fun startLoadTimer() {
@@ -108,66 +103,50 @@ class ChatViewModel @Inject constructor(
             messages = _uiState.value.messages + userMessage + placeholder,
             input = "",
             isGenerating = true,
-            errorMessage = null,
         )
 
         generationJob = viewModelScope.launch {
-            // Account questions are answered from repository data, never by the model. Only
-            // what the rules cannot route falls through to generation.
-            when (val answer = answerPortfolioQuery(prompt)) {
-                is AnswerResult.Answer -> streamPortfolioText(replyId, answer.text)
-                is AnswerResult.Refusal -> streamPortfolioText(replyId, answer.text)
-                is AnswerResult.Failure -> streamPortfolioText(replyId, answer.text)
-                // Not an account question, so ask the documentation index before the model.
-                AnswerResult.NoMatch -> if (!answerFromDocs(replyId, prompt)) {
-                    generateWithModel(replyId, prompt)
-                }
+            if (modelCanGenerate()) {
+                answerWithAgent(prompt, replyId)
+            } else {
+                // No engine, no answers: the rules tier is gone, so say exactly that.
+                answerNoInformation(replyId)
             }
         }
     }
 
-    /**
-     * Answers from the shipped documentation. Returns false when nothing was retrieved, so the
-     * caller can fall through to the model rather than showing an empty reply.
-     */
-    private suspend fun answerFromDocs(replyId: String, prompt: String): Boolean {
-        var text: String? = null
-        var titles: List<String> = emptyList()
+    private fun modelCanGenerate(): Boolean =
+        (localRag.state.value as? LocalRagState.Ready)?.canGenerate == true
 
-        localRag.query(prompt).collect { chunk ->
-            when (chunk) {
-                is AnswerChunk.Sources -> titles = chunk.passages.map { passage ->
-                    listOfNotNull(passage.title, passage.heading).joinToString(" — ")
+    /**
+     * The full assistant: the SDK plans tool calls against the app's functions, executes them,
+     * and gates the final text against the observations. Anything the loop cannot resolve
+     * honestly becomes the fixed fallback, never a guess.
+     */
+    private suspend fun answerWithAgent(prompt: String, replyId: String) {
+        Log.d(TAG, "send \"$prompt\" via agent")
+        when (val answer = localRag.runAgent(prompt, agentConfig)) {
+            is AgentOutcome.Final -> {
+                val source = when {
+                    answer.sources.isNotEmpty() -> MessageSource.DOCUMENTATION
+                    answer.usedTools.any { it != AssistantToolDefinitions.SEARCH_DOCUMENTATION } ->
+                        MessageSource.PORTFOLIO_DATA
+                    else -> MessageSource.MODEL
                 }
-                is AnswerChunk.Token -> text = (text ?: "") + chunk.text
-                is AnswerChunk.Error -> text = null
-                is AnswerChunk.Done -> Unit
+                updateMessage(replyId) { it.copy(source = source, sources = answer.sources) }
+                streamWords(replyId, answer.text)
             }
-        }
 
-        val answer = text?.takeIf { it.isNotBlank() } ?: return false
-        updateMessage(replyId) {
-            it.copy(source = MessageSource.DOCUMENTATION, sources = titles)
+            AgentOutcome.Refused ->
+                streamWords(replyId, NoInformationFallback.ADVICE_REFUSAL)
+
+            AgentOutcome.Unresolved -> answerNoInformation(replyId)
         }
-        streamWords(replyId, answer)
-        return true
     }
 
-    private suspend fun generateWithModel(replyId: String, prompt: String) {
-        // Collect off the main thread; only the resulting state hops back to Main.
-        generateReply(prompt)
-            .flowOn(Dispatchers.IO)
-            .onCompletion { finishStreaming(replyId) }
-            .collect { chunk -> applyChunk(replyId, chunk) }
-    }
-
-    /**
-     * Templated answers are streamed a word at a time so they read like the model's replies.
-     * The text is already complete before the first word appears; the delay is presentation only.
-     */
-    private suspend fun streamPortfolioText(replyId: String, text: String) {
-        updateMessage(replyId) { it.copy(source = MessageSource.PORTFOLIO_DATA) }
-        streamWords(replyId, text)
+    private suspend fun answerNoInformation(replyId: String) {
+        updateMessage(replyId) { it.copy(source = MessageSource.NO_INFORMATION) }
+        streamWords(replyId, NoInformationFallback.TEXT)
     }
 
     private suspend fun streamWords(replyId: String, text: String) {
@@ -176,18 +155,6 @@ class ChatViewModel @Inject constructor(
             delay(PORTFOLIO_WORD_DELAY_MS)
         }
         finishStreaming(replyId)
-    }
-
-    private fun applyChunk(replyId: String, chunk: GenerationChunk) {
-        when (chunk) {
-            is GenerationChunk.Token -> updateMessage(replyId) { it.copy(text = it.text + chunk.text) }
-            is GenerationChunk.Done ->
-                updateMessage(replyId) { it.copy(isStreaming = false, metrics = chunk.metrics) }
-            is GenerationChunk.Error -> {
-                updateMessage(replyId) { it.copy(isStreaming = false) }
-                _uiState.value = _uiState.value.copy(errorMessage = chunk.message)
-            }
-        }
     }
 
     private fun finishStreaming(replyId: String) {
@@ -209,34 +176,25 @@ class ChatViewModel @Inject constructor(
 
     fun onClearChat() {
         generationJob?.cancel()
-        viewModelScope.launch {
-            resetConversation()
-            _uiState.value = _uiState.value.copy(messages = emptyList(), isGenerating = false)
-        }
+        // Stateless engine: clearing the transcript is all there is to do. No conversation
+        // survives a turn, so nothing can leak into the next answer.
+        _uiState.value = _uiState.value.copy(messages = emptyList(), isGenerating = false)
     }
 
     fun onReloadEngine() {
         generationJob?.cancel()
-        repository.release()
+        localRag.release()
         loadEngine()
     }
 
-    fun onToggleDebugPanel() {
-        _uiState.value = _uiState.value.copy(showDebugPanel = !_uiState.value.showDebugPanel)
-    }
-
-    fun onSettingsChange(settings: GenerationSettings) {
-        _uiState.value = _uiState.value.copy(settings = settings)
-        viewModelScope.launch { applySettings(settings) }
-    }
-
     private companion object {
+        const val TAG = "LocalRagChat"
         const val PORTFOLIO_WORD_DELAY_MS = 35L
     }
 
     override fun onCleared() {
         generationJob?.cancel()
-        repository.release()
+        localRag.release()
         super.onCleared()
     }
 }

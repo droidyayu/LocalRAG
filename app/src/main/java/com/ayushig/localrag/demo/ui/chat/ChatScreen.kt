@@ -34,15 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ayushig.localrag.android.LocalRagState
 import com.ayushig.localrag.demo.domain.model.ChatMessage
-import com.ayushig.localrag.demo.domain.model.EngineState
-import com.ayushig.localrag.demo.domain.model.GenerationMetrics
 import com.ayushig.localrag.demo.domain.model.MessageSource
-import com.ayushig.localrag.demo.domain.model.GenerationSettings
 import com.ayushig.localrag.demo.domain.model.Role
 
 /** The only composable that touches the ViewModel. */
@@ -60,8 +57,6 @@ fun ChatRoute(
         onStop = viewModel::onStop,
         onClearChat = viewModel::onClearChat,
         onReloadEngine = viewModel::onReloadEngine,
-        onToggleDebugPanel = viewModel::onToggleDebugPanel,
-        onSettingsChange = viewModel::onSettingsChange,
         onRetryModelCheck = viewModel::loadEngine,
         modifier = modifier,
     )
@@ -76,8 +71,6 @@ fun ChatScreen(
     onStop: () -> Unit,
     onClearChat: () -> Unit,
     onReloadEngine: () -> Unit,
-    onToggleDebugPanel: () -> Unit,
-    onSettingsChange: (GenerationSettings) -> Unit,
     onRetryModelCheck: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -98,9 +91,9 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Gemma 3 270M IT", style = MaterialTheme.typography.titleMedium)
+                        Text("Gemma 4 E2B IT", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = "${uiState.settings.backend} · litertlm ${uiState.libraryVersion}",
+                            text = "${uiState.retrievalMode()} · litertlm ${uiState.libraryVersion}",
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -110,7 +103,6 @@ fun ChatScreen(
                     OverflowMenu(
                         onClearChat = onClearChat,
                         onReloadEngine = onReloadEngine,
-                        onToggleDebugPanel = onToggleDebugPanel,
                     )
                 },
             )
@@ -133,15 +125,6 @@ fun ChatScreen(
                 items(uiState.messages, key = { it.id }) { message -> MessageRow(message) }
             }
 
-            uiState.errorMessage?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-            }
-
             InputRow(
                 input = uiState.input,
                 canSend = uiState.canSend,
@@ -153,26 +136,19 @@ fun ChatScreen(
         }
     }
 
-    if (uiState.showDebugPanel) {
-        DebugPanel(
-            settings = uiState.settings,
-            onSettingsChange = onSettingsChange,
-            onDismiss = onToggleDebugPanel,
-        )
-    }
 }
 
 @Composable
 private fun EngineBanner(uiState: ChatUiState) {
     when (val state = uiState.engineState) {
-        is EngineState.Loading -> Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        is LocalRagState.Loading -> Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
             Text(
                 "Loading model… ${uiState.loadingElapsedSeconds}s",
                 style = MaterialTheme.typography.bodySmall,
             )
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
         }
-        is EngineState.Failed -> Text(
+        is LocalRagState.Failed -> Text(
             text = "Engine failed: ${state.reason}",
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
@@ -181,6 +157,9 @@ private fun EngineBanner(uiState: ChatUiState) {
         else -> Unit
     }
 }
+
+private fun ChatUiState.retrievalMode(): String =
+    if ((engineState as? LocalRagState.Ready)?.usingVectors == true) "hybrid" else "bm25"
 
 @Composable
 private fun MessageRow(message: ChatMessage) {
@@ -210,6 +189,7 @@ private fun MessageRow(message: ChatMessage) {
                     text = when (message.source) {
                         MessageSource.PORTFOLIO_DATA -> "from your account"
                         MessageSource.DOCUMENTATION -> "from the help documentation"
+                        MessageSource.NO_INFORMATION -> "no matching information"
                         MessageSource.MODEL -> ""
                     },
                     style = MaterialTheme.typography.labelSmall,
@@ -226,24 +206,8 @@ private fun MessageRow(message: ChatMessage) {
                     )
                 }
             }
-            message.metrics?.let { MetricsLine(it) }
         }
     }
-}
-
-@Composable
-private fun MetricsLine(metrics: GenerationMetrics) {
-    Text(
-        text = "TTFT %dms · %.1f tok/s · ~%d tok · %.1fs".format(
-            metrics.timeToFirstTokenMs,
-            metrics.tokensPerSecond,
-            metrics.approxTokenCount,
-            metrics.totalTimeMs / 1000.0,
-        ),
-        style = MaterialTheme.typography.labelSmall,
-        fontFamily = FontFamily.Monospace,
-        modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp),
-    )
 }
 
 @Composable
@@ -275,7 +239,6 @@ private fun InputRow(
 private fun OverflowMenu(
     onClearChat: () -> Unit,
     onReloadEngine: () -> Unit,
-    onToggleDebugPanel: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -294,17 +257,13 @@ private fun OverflowMenu(
                 text = { Text("Reload engine") },
                 onClick = { expanded = false; onReloadEngine() },
             )
-            DropdownMenuItem(
-                text = { Text("Debug panel") },
-                onClick = { expanded = false; onToggleDebugPanel() },
-            )
         }
     }
 }
 
-private fun EngineState.label(): String = when (this) {
-    EngineState.Idle -> "idle"
-    EngineState.Loading -> "loading"
-    is EngineState.Ready -> "ready ${loadTimeMs}ms"
-    is EngineState.Failed -> "failed"
+private fun LocalRagState.label(): String = when (this) {
+    LocalRagState.Idle -> "idle"
+    LocalRagState.Loading -> "loading"
+    is LocalRagState.Ready -> if (usingVectors) "ready · hybrid" else "ready · bm25"
+    is LocalRagState.Failed -> "failed"
 }

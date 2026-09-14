@@ -6,8 +6,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Holds the process-wide slot for the generation engine.
  *
  * One Engine per process: a second live instance means a native out-of-memory kill rather than a
- * catchable error. Creation therefore goes through [acquire], and a refused caller falls back to
- * extractive answers exactly as it would on any other engine failure.
+ * catchable error. Creation therefore goes through [acquire], and a refused caller runs without
+ * a generator exactly as it would on any other engine failure.
  */
 internal object EngineSlot {
     private val held = AtomicBoolean(false)

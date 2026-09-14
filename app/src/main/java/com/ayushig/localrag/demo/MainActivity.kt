@@ -22,7 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import com.ayushig.localrag.demo.ui.navigation.AppNavHost
 import com.ayushig.localrag.demo.ui.navigation.AssistantRoute
 import com.ayushig.localrag.demo.ui.navigation.PortfolioRoute
-import com.ayushig.localrag.demo.ui.navigation.ProfileRoute
+import com.ayushig.localrag.demo.ui.navigation.RetrievalRoute
 import com.ayushig.localrag.demo.ui.theme.LocalRAGTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -50,8 +50,6 @@ fun LocalRAGApp() {
             AppDestinations.entries.forEach { destination ->
                 item(
                     icon = {
-                        // ic_account_box is a 48dp asset while the others are 24dp; pin the size
-                        // so every tab's label sits on the same baseline.
                         Icon(
                             painter = painterResource(destination.icon),
                             contentDescription = destination.label,
@@ -92,5 +90,5 @@ enum class AppDestinations(
 ) {
     PORTFOLIO("Portfolio", R.drawable.ic_wallet, PortfolioRoute.ROUTE),
     ASSISTANT("Assistant", R.drawable.ic_chat, AssistantRoute.ROUTE),
-    PROFILE("Profile", R.drawable.ic_account_box, ProfileRoute.ROUTE),
+    RETRIEVAL("Retrieval", R.drawable.ic_search, RetrievalRoute.ROUTE),
 }

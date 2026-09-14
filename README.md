@@ -122,7 +122,7 @@ references the answer was built from.
 **Decided, and built:**
 
 - DI framework — Hilt, wired up in `di/`
-- Embedding model and on-device inference runtime — EmbeddingGemma + Gemma 3 270M on LiteRT-LM,
+- Embedding model and on-device inference runtime — EmbeddingGemma + Gemma 4 E2B IT on LiteRT-LM,
   pinned to the same version at build time and on device
 - Vector store — brute-force dot product over normalized vectors in `localrag-core`, no database
 - Generation runs fully on-device; retrieved context never leaves the phone
@@ -165,7 +165,7 @@ app/src/main/java/com/ayushig/localrag/demo/
 ├── data/                    # repository implementations, local stores, DTOs + mappers
 ├── di/                      # Hilt modules (LocalRagModule provides the singleton LocalRag)
 └── ui/                      # screens, ViewModels, navigation, theme
-    ├── chat/                # assistant surface, streams LocalRag.query()
+    ├── chat/                # assistant surface, drives runAgent() turns
     ├── docs/                # documentation search over retrieveOnly()
     └── portfolio/           # home + category detail screens
 app/src/main/docs/           # Markdown corpus indexed by the plugin at build time
