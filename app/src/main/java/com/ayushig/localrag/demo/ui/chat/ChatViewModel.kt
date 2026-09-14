@@ -6,8 +6,12 @@ import com.ayushig.localrag.demo.BuildConfig
 import com.ayushig.localrag.demo.domain.model.ChatMessage
 import com.ayushig.localrag.demo.domain.model.MessageSource
 import com.ayushig.localrag.demo.domain.model.Role
+import com.ayushig.localrag.demo.domain.model.ToolCallRecord
 import com.ayushig.localrag.android.AgentConfig
+import com.ayushig.localrag.android.AgentEvent
+import com.ayushig.localrag.android.AgentMessage
 import com.ayushig.localrag.android.AgentOutcome
+import com.ayushig.localrag.android.AgentRole
 import com.ayushig.localrag.android.LocalRag
 import com.ayushig.localrag.android.LocalRagState
 import com.ayushig.localrag.demo.data.ModelFileLocator
@@ -89,10 +93,30 @@ class ChatViewModel @Inject constructor(
     }
 
     fun onSend() {
-        val prompt = _uiState.value.input.trim()
+        sendPrompt(_uiState.value.input.trim())
+    }
+
+    /** Suggestion chips send directly without touching the input field. */
+    fun onSuggestion(question: String) {
+        sendPrompt(question)
+    }
+
+    private fun sendPrompt(prompt: String) {
         if (prompt.isEmpty()) return
 
         generationJob?.cancel()
+
+        // The turn about to run sees everything before it: history is per-call data the
+        // ViewModel assembles, never engine memory.
+        val history = _uiState.value.messages
+            .filter { !it.isStreaming && it.text.isNotBlank() }
+            .takeLast(MAX_HISTORY_TURNS)
+            .map {
+                AgentMessage(
+                    role = if (it.role == Role.USER) AgentRole.USER else AgentRole.MODEL,
+                    text = it.text,
+                )
+            }
 
         val userMessage = ChatMessage(id = UUID.randomUUID().toString(), role = Role.USER, text = prompt)
         val replyId = UUID.randomUUID().toString()
@@ -107,7 +131,7 @@ class ChatViewModel @Inject constructor(
 
         generationJob = viewModelScope.launch {
             if (modelCanGenerate()) {
-                answerWithAgent(prompt, replyId)
+                answerWithAgent(prompt, replyId, history)
             } else {
                 // No engine, no answers: the rules tier is gone, so say exactly that.
                 answerNoInformation(replyId)
@@ -123,9 +147,17 @@ class ChatViewModel @Inject constructor(
      * and gates the final text against the observations. Anything the loop cannot resolve
      * honestly becomes the fixed fallback, never a guess.
      */
-    private suspend fun answerWithAgent(prompt: String, replyId: String) {
+    private suspend fun answerWithAgent(
+        prompt: String,
+        replyId: String,
+        history: List<AgentMessage>,
+    ) {
         Log.d(TAG, "send \"$prompt\" via agent")
-        when (val answer = localRag.runAgent(prompt, agentConfig)) {
+        // The calls accumulate here as the turn runs, so the placeholder bubble can show them
+        // live and the finished message keeps them for its expandable details.
+        val records = mutableListOf<ToolCallRecord>()
+        val onEvent: (AgentEvent) -> Unit = { event -> handleAgentEvent(replyId, event, records) }
+        when (val answer = localRag.runAgent(prompt, agentConfig, history, onEvent)) {
             is AgentOutcome.Final -> {
                 val source = when {
                     answer.sources.isNotEmpty() -> MessageSource.DOCUMENTATION
@@ -133,7 +165,9 @@ class ChatViewModel @Inject constructor(
                         MessageSource.PORTFOLIO_DATA
                     else -> MessageSource.MODEL
                 }
-                updateMessage(replyId) { it.copy(source = source, sources = answer.sources) }
+                updateMessage(replyId) {
+                    it.copy(source = source, sources = answer.sources, tools = records.toList())
+                }
                 streamWords(replyId, answer.text)
             }
 
@@ -144,12 +178,46 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Runs on whatever thread the engine calls back on; StateFlow updates are thread-safe and
+     * the records list is touched only by this one turn.
+     */
+    private fun handleAgentEvent(
+        replyId: String,
+        event: AgentEvent,
+        records: MutableList<ToolCallRecord>,
+    ) {
+        when (event) {
+            is AgentEvent.CallingTool -> {
+                records += ToolCallRecord(name = event.name, args = event.args)
+                updateMessage(replyId) { it.copy(tools = records.toList()) }
+            }
+
+            is AgentEvent.ToolFinished -> {
+                val index = records.indexOfLast { it.name == event.name && !it.finished }
+                if (index >= 0) {
+                    records[index] = records[index].copy(
+                        resultChars = event.observationChars,
+                        sources = event.sourceTitles,
+                        finished = true,
+                    )
+                    updateMessage(replyId) { it.copy(tools = records.toList()) }
+                }
+            }
+
+            AgentEvent.Thinking, AgentEvent.JudgingAnswer -> Unit
+        }
+        _uiState.value = _uiState.value.copy(activeActivity = event.statusText())
+    }
+
     private suspend fun answerNoInformation(replyId: String) {
         updateMessage(replyId) { it.copy(source = MessageSource.NO_INFORMATION) }
         streamWords(replyId, NoInformationFallback.TEXT)
     }
 
     private suspend fun streamWords(replyId: String, text: String) {
+        // The working card hands off to the bubble: no status lingers under arriving text.
+        _uiState.value = _uiState.value.copy(activeActivity = null)
         text.split(" ").forEachIndexed { index, word ->
             updateMessage(replyId) { it.copy(text = if (index == 0) word else it.text + " " + word) }
             delay(PORTFOLIO_WORD_DELAY_MS)
@@ -159,7 +227,7 @@ class ChatViewModel @Inject constructor(
 
     private fun finishStreaming(replyId: String) {
         updateMessage(replyId) { it.copy(isStreaming = false) }
-        _uiState.value = _uiState.value.copy(isGenerating = false)
+        _uiState.value = _uiState.value.copy(isGenerating = false, activeActivity = null)
     }
 
     private fun updateMessage(id: String, transform: (ChatMessage) -> ChatMessage) {
@@ -171,14 +239,15 @@ class ChatViewModel @Inject constructor(
     fun onStop() {
         generationJob?.cancel()
         generationJob = null
-        _uiState.value = _uiState.value.copy(isGenerating = false)
+        _uiState.value = _uiState.value.copy(isGenerating = false, activeActivity = null)
     }
 
     fun onClearChat() {
         generationJob?.cancel()
         // Stateless engine: clearing the transcript is all there is to do. No conversation
         // survives a turn, so nothing can leak into the next answer.
-        _uiState.value = _uiState.value.copy(messages = emptyList(), isGenerating = false)
+        _uiState.value =
+            _uiState.value.copy(messages = emptyList(), isGenerating = false, activeActivity = null)
     }
 
     fun onReloadEngine() {
@@ -190,6 +259,8 @@ class ChatViewModel @Inject constructor(
     private companion object {
         const val TAG = "LocalRagChat"
         const val PORTFOLIO_WORD_DELAY_MS = 35L
+        /** Recent turns per call; the SDK's char budget drops older ones first anyway. */
+        const val MAX_HISTORY_TURNS = 6
     }
 
     override fun onCleared() {

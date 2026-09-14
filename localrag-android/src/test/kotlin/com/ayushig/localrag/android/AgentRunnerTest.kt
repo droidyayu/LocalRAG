@@ -159,4 +159,82 @@ class AgentRunnerTest {
         assertEquals(4, calls)
         assertTrue(answer is AgentOutcome.Final)
     }
+
+    @Test
+    fun `prose smuggling a directive ends the turn unresolved`() = runTest {
+        val answer = AgentRunner().answer(
+            generate = scripted("Hello!\nTOOL: get_portfolio_summary."),
+            query = "hi",
+            config = config(mapOf("get_portfolio_summary" to figures)),
+        )
+        assertEquals(AgentOutcome.Unresolved, answer)
+    }
+
+    @Test
+    fun `answer smuggling a directive ends the turn unresolved`() = runTest {
+        val answer = AgentRunner().answer(
+            generate = scripted(
+                "ANSWER: Your portfolio is worth $12,340.00.\nTOOL: find_holding | query=x.",
+            ),
+            query = "what is my portfolio worth",
+            config = config(mapOf("get_portfolio_summary" to figures)),
+        )
+        assertEquals(AgentOutcome.Unresolved, answer)
+    }
+
+    @Test
+    fun `follow-up resolves with history in context`() = runTest {
+        val history = listOf(
+            AgentMessage(AgentRole.USER, "what is my portfolio worth"),
+            AgentMessage(AgentRole.MODEL, "Your portfolio is worth $12,340.00."),
+        )
+        val answer = AgentRunner().answer(
+            generate = scripted(
+                "TOOL: get_portfolio_summary",
+                "ANSWER: The profit is $1,240.00.",
+            ),
+            query = "and the profit",
+            config = config(mapOf("get_portfolio_summary" to figures)),
+            history = history,
+        )
+        assertTrue(answer is AgentOutcome.Final)
+    }
+
+    @Test
+    fun `history digits never count as grounding evidence`() = runTest {
+        val history = listOf(
+            AgentMessage(AgentRole.MODEL, "Your code is 1234."),
+        )
+        val answer = AgentRunner().answer(
+            generate = scripted("ANSWER: Your code is 1234."),
+            query = "what is my code",
+            config = config(emptyMap()),
+            history = history,
+        )
+        assertEquals(AgentOutcome.Unresolved, answer)
+    }
+
+    @Test
+    fun `turn emits progress events in order`() = runTest {
+        val events = mutableListOf<AgentEvent>()
+        AgentRunner().answer(
+            generate = scripted(
+                "TOOL: get_portfolio_summary",
+                "ANSWER: Your portfolio is worth $12,340.00.",
+            ),
+            query = "what is my portfolio worth",
+            config = config(mapOf("get_portfolio_summary" to figures)),
+            onEvent = { events += it },
+        )
+        assertEquals(
+            listOf(
+                AgentEvent.Thinking,
+                AgentEvent.CallingTool("get_portfolio_summary", emptyMap()),
+                AgentEvent.ToolFinished("get_portfolio_summary", figures.text.length, emptyList()),
+                AgentEvent.Thinking,
+                AgentEvent.JudgingAnswer,
+            ),
+            events,
+        )
+    }
 }

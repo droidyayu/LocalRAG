@@ -130,15 +130,25 @@ class LocalRag private constructor(
      * The configurable agent turn: the SDK plans tool calls in a strict grammar, executes the
      * host app's [AgentConfig.tools], and gates the final text against the observations. All
      * words — prompts, tools, policy — arrive in [config]; the SDK owns only the machinery.
-     * Stateless like everything else here: the transcript lives for this call alone.
+     * Stateless like everything else here: the transcript lives for this call alone. [history]
+     * carries earlier turns in so follow-ups resolve; the SDK retains nothing, and history
+     * never counts as grounding evidence. Progress arrives through [onEvent] for hosts that
+     * show the turn's working; ignoring it changes nothing about the outcome.
      */
-    suspend fun runAgent(query: String, config: AgentConfig): AgentOutcome =
+    suspend fun runAgent(
+        query: String,
+        config: AgentConfig,
+        history: List<AgentMessage> = emptyList(),
+        onEvent: (AgentEvent) -> Unit = {},
+    ): AgentOutcome =
         withContext(Dispatchers.IO) {
             flight.run {
                 AgentRunner().answer(
                     generate = { prompt -> generator?.generate(prompt) },
                     query = query,
                     config = config,
+                    history = history,
+                    onEvent = onEvent,
                 )
             }
         }

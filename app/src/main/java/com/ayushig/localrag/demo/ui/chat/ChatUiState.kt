@@ -12,6 +12,8 @@ data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val input: String = "",
     val isGenerating: Boolean = false,
+    /** What the running turn is doing right now; null when nothing runs. */
+    val activeActivity: String? = null,
     val loadingElapsedSeconds: Int = 0,
     val libraryVersion: String = "",
 ) {

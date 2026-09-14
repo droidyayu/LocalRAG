@@ -2,7 +2,10 @@ package com.ayushig.localrag.android.internal
 
 import android.util.Log
 import com.ayushig.localrag.android.AgentConfig
+import com.ayushig.localrag.android.AgentEvent
+import com.ayushig.localrag.android.AgentMessage
 import com.ayushig.localrag.android.AgentOutcome
+import com.ayushig.localrag.android.AgentRole
 import com.ayushig.localrag.core.answer.OutputGate
 
 /**
@@ -19,57 +22,86 @@ internal class AgentRunner {
         generate: suspend (String) -> String?,
         query: String,
         config: AgentConfig,
+        history: List<AgentMessage> = emptyList(),
+        onEvent: (AgentEvent) -> Unit = {},
     ): AgentOutcome {
         val allowedTools = config.tools.associateBy { it.name.lowercase() }
-        val transcript = StringBuilder()
+        // System prompt once, then the recent past: every round after the first re-reads
+        // this whole transcript, so the grammar reminder rides along with the history.
+        val transcript = StringBuilder(config.systemPrompt)
+        transcript.append(historyBlock(history, config))
         val observations = mutableListOf<String>()
         val sources = mutableListOf<String>()
         val usedTools = mutableListOf<String>()
 
         Log.d(TAG, "turn start: \"$query\"")
         repeat(config.maxToolRounds) { round ->
-            val raw = generate(transcript.prompt(query, config))
+            onEvent(AgentEvent.Thinking)
+            val raw = generate(transcript.prompt(query))
             Log.d(TAG, "round $round model said: ${raw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
             val parsed = AgentProtocol.parse(raw, allowedTools.keys)
             if (parsed == null) {
                 // Plain prose with no observations is a greeting, not a plan: judge it as
                 // conversational small talk (no digits allowed, advisory still refuses).
                 // Prose after tools ran stays unresolved — unverifiable claims must not pass.
+                // Prose smuggling a directive line is not prose at all.
                 val prose = raw?.trim().orEmpty()
-                if (prose.isEmpty() || observations.isNotEmpty() || !isConversationalShape(prose, config)) {
+                if (prose.isEmpty() || observations.isNotEmpty() ||
+                    AgentProtocol.containsDirective(prose) ||
+                    !isConversationalShape(prose, config)
+                ) {
                     Log.w(TAG, "round $round: off-grammar output, ending unresolved")
                     return AgentOutcome.Unresolved
                 }
                 Log.d(TAG, "round $round: plain prose accepted as conversational")
+                onEvent(AgentEvent.JudgingAnswer)
                 return judge(prose, query, observations, sources, usedTools, config)
             }
             when (parsed) {
                 is AgentProtocol.Parsed.ToolCall -> {
                     val tool = allowedTools[parsed.name]!!
+                    onEvent(AgentEvent.CallingTool(parsed.name, parsed.args))
                     val observation = runCatching { tool.execute(parsed.args) }.getOrNull()
                     if (observation == null) {
                         Log.w(TAG, "round $round: tool ${parsed.name} failed, ending unresolved")
                         return AgentOutcome.Unresolved
                     }
                     Log.d(TAG, "round $round: tool ${parsed.name} ok (${observation.text.length} chars)")
+                    onEvent(
+                        AgentEvent.ToolFinished(
+                            parsed.name,
+                            observation.text.length,
+                            observation.sourceTitles,
+                        ),
+                    )
                     observations += observation.text
                     sources += observation.sourceTitles
                     usedTools += observation.tool
                     transcript.observe(parsed, observation)
                 }
 
-                is AgentProtocol.Parsed.FinalAnswer ->
+                is AgentProtocol.Parsed.FinalAnswer -> {
+                    if (AgentProtocol.containsDirective(parsed.text)) {
+                        Log.w(TAG, "round $round: answer smuggles a directive, ending unresolved")
+                        return AgentOutcome.Unresolved
+                    }
+                    onEvent(AgentEvent.JudgingAnswer)
                     return judge(parsed.text, query, observations, sources, usedTools, config)
+                }
             }
         }
 
+        onEvent(AgentEvent.Thinking)
         val forcedRaw = generate(transcript.forceAnswer(query))
         Log.d(TAG, "forced answer model said: ${forcedRaw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
         val forced = AgentProtocol.parse(forcedRaw, allowedTools.keys)
-        if (forced !is AgentProtocol.Parsed.FinalAnswer) {
+        if (forced !is AgentProtocol.Parsed.FinalAnswer ||
+            AgentProtocol.containsDirective(forced.text)
+        ) {
             Log.w(TAG, "forced answer off-grammar, ending unresolved")
             return AgentOutcome.Unresolved
         }
+        onEvent(AgentEvent.JudgingAnswer)
         return judge(forced.text, query, observations, sources, usedTools, config)
     }
 
@@ -127,9 +159,33 @@ internal class AgentRunner {
         return answer.last() == '.' || answer.last() == '!' || answer.last() == '?'
     }
 
-    private fun StringBuilder.prompt(query: String, config: AgentConfig): String {
-        if (isEmpty()) append(config.systemPrompt)
-        return toString() + "\nQuestion: $query\n"
+    private fun StringBuilder.prompt(query: String): String =
+        toString() + "\nQuestion: $query\n"
+
+    /**
+     * Earlier turns, newest dropped first past the budget, so a long chat cannot blow the
+     * on-device context window. Labeled plainly and kept out of the evidence: the gate
+     * judges the answer against fresh observations, never against what was said before.
+     */
+    private fun historyBlock(history: List<AgentMessage>, config: AgentConfig): String {
+        val kept = mutableListOf<AgentMessage>()
+        var chars = 0
+        for (message in history.asReversed()) {
+            if (message.text.isBlank()) continue
+            if (kept.isNotEmpty() && chars + message.text.length > config.maxHistoryChars) break
+            // The newest turn always rides along, even over budget: a follow-up without its
+            // parent is unanswerable, while a slightly long context is merely expensive.
+            kept.add(message)
+            chars += message.text.length
+        }
+        if (kept.isEmpty()) return ""
+        return kept.asReversed().joinToString(
+            separator = "\n",
+            prefix = "Earlier in this conversation:\n",
+            postfix = "\n",
+        ) { message ->
+            (if (message.role == AgentRole.USER) "User: " else "Assistant: ") + message.text.trim()
+        }
     }
 
     private fun StringBuilder.observe(

@@ -23,3 +23,7 @@ local.properties
 *.litertlm
 /gemma-4-E2B-it.litertlm
 /RZCY40Q8W4Z
+
+# Maestro run artifacts: timestamped reports with logs, screenshots, logcat,
+# and stamped flow copies. Rebuilt on every run, never commit.
+maestro/report/

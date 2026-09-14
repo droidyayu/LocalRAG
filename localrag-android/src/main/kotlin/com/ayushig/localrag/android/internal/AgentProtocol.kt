@@ -31,6 +31,18 @@ internal object AgentProtocol {
         }
     }
 
+    /**
+     * True when any line reads as a turn directive. The conversational path only accepts prose,
+     * so a directive hiding below small talk is off-grammar, not chat — without this a reply
+     * could carry a raw TOOL: line into the transcript UI.
+     */
+    fun containsDirective(text: String): Boolean =
+        text.lineSequence().any { line ->
+            val trimmed = line.trim()
+            trimmed.startsWith(TOOL_PREFIX, ignoreCase = true) ||
+                trimmed.startsWith(ANSWER_PREFIX, ignoreCase = true)
+        }
+
     private fun parseTool(body: String, allowedTools: Set<String>): Parsed.ToolCall? {
         val name = body.substringBefore("|").trim().lowercase()
         if (name.isEmpty() || name !in allowedTools) return null

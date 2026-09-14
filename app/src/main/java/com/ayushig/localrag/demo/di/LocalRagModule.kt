@@ -16,8 +16,8 @@ object LocalRagModule {
 
     /**
      * Generation is used when the model has been pushed to the device, and simply absent when it
-     * has not. Retrieval stays BM25 either way until an embedding model is supplied, so this
-     * covers two of the four degradation states depending on what is on disk.
+     * has not. Retrieval stays BM25 either way until an embedding model is supplied; the Ready
+     * state flags say which of the two configurations is live.
      */
     @Provides
     @Singleton

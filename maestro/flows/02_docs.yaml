@@ -1,0 +1,61 @@
+# Assistant acceptance suite: documentation answers come from the help corpus.
+#
+# "from the help documentation" proves the search tool grounded the turn.
+# Anything the corpus does not cover must meet the fixed fallback verbatim.
+
+appId: com.ayushig.localrag.demo
+---
+- launchApp:
+    appId: com.ayushig.localrag.demo
+# Cold start lands on the Portfolio tab; the assistant lives under Assistant.
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: ${READY_LABEL}
+    timeout: 300000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Covered by deposit-funds.md.
+- tapOn: "Ask something"
+- inputText: 'How do I deposit funds?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from the help documentation"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Covered by brokerage-charges.md.
+- tapOn: "Ask something"
+- inputText: 'What are the brokerage charges?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from the help documentation"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Covered by close-account.md.
+- tapOn: "Ask something"
+- inputText: 'How do I close my account?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from the help documentation"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# No doc covers passwords: fixed fallback, word for word, never invented steps.
+- tapOn: "Ask something"
+- inputText: 'How do I reset my password?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: >-
+      I don't have information on that yet. I can answer questions about your portfolio
+      and the help documentation — try rephrasing, or check the Retrieval tab to see
+      what the docs cover.
+    timeout: 180000

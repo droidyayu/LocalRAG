@@ -49,9 +49,9 @@ object OutputGate {
 
         // A help corpus is full of fees, rates and limits. A small model restating one incorrectly
         // is the worst thing this library can do, so every digit must be traceable to a passage.
-        val sourceNumbers = passages.flatMapTo(mutableSetOf()) { NUMBER.findAll(it).map { m -> m.value } }
+        val sourceNumbers = passages.flatMapTo(mutableSetOf()) { NUMBER.findAll(it).map { m -> m.value.figureToken() } }
         val invented = NUMBER.findAll(trimmed)
-            .map { it.value }
+            .map { it.value.figureToken() }
             .filter { it !in sourceNumbers }
             .toList()
         if (invented.isNotEmpty()) {
@@ -89,6 +89,14 @@ object OutputGate {
 
     /** Digits with their separators, so 1,200 and 4.2 are single tokens rather than fragments. */
     private val NUMBER = Regex("\\d[\\d,.]*")
+
+    /**
+     * The number pattern also swallows a sentence-final period, so a figure ending a sentence
+     * ("worth $12,340.00.") tokenizes with the period attached. That period is punctuation,
+     * not part of the figure: without trimming it, every correctly restated sentence-final
+     * figure reads as invented. Applied on both sides so the comparison stays symmetric.
+     */
+    private fun String.figureToken(): String = trimEnd('.')
 
     private val SENTENCE_ENDINGS = setOf(Char(46), Char(33), Char(63))
 

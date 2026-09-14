@@ -24,4 +24,6 @@ data class ChatMessage(
     val source: MessageSource = MessageSource.MODEL,
     /** Titles of the passages that grounded a documentation answer. */
     val sources: List<String> = emptyList(),
+    /** The function calls behind an assistant turn, in execution order. */
+    val tools: List<ToolCallRecord> = emptyList(),
 )

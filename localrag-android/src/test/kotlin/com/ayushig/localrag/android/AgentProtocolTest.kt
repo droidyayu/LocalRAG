@@ -92,4 +92,12 @@ class AgentProtocolTest {
         assertNull(AgentProtocol.parse("TOOL: get_category_summary | category=", tools))
         assertNull(AgentProtocol.parse("TOOL: get_category_summary | =METALS", tools))
     }
+
+    @Test
+    fun `directive detection spans lines and ignores prose`() {
+        assertEquals(false, AgentProtocol.containsDirective("Hello! Ask me anything."))
+        assertEquals(false, AgentProtocol.containsDirective("The TOOL: prefix is how calls start."))
+        assertEquals(true, AgentProtocol.containsDirective("Hello!\nTOOL: find_holding | query=x"))
+        assertEquals(true, AgentProtocol.containsDirective("  answer: sure, one moment.  "))
+    }
 }

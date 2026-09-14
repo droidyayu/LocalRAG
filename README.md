@@ -9,17 +9,20 @@ what to do next — without leaving the screen they're on or filing a support ti
 Two halves that work together:
 
 **1. The fintech app UI**
-A Compose-based fintech client — accounts, balances, transactions, transfers, and profile. This is
-the surface the user actually uses, and it's also the source of truth the assistant answers from.
+A Compose-based fintech client — portfolio home and category detail screens, an assistant tab,
+and a documentation retrieval tab. This is the surface the user actually uses, and its
+repository data is also the source of truth the assistant answers from.
 
 **2. The assistant**
-A conversational helper embedded in the app. It handles the kinds of questions users ask support:
+A conversational help assistant embedded in the app. It handles the kinds of questions users
+ask support:
 
-- **FAQ / product questions** — "What are the transfer limits?", "How long do withdrawals take?",
-  "What fees apply to this account type?"
-- **App status and account questions** — "Why is my transfer still pending?", "Is my KYC
-  verification complete?", "What's the status of my card?"
-- **Navigational help** — "Where do I change my payout account?", "How do I enable 2FA?"
+- **FAQ / product questions** — "How do I deposit funds?", "What are the brokerage charges?",
+  "How do I close my account?"
+- **App status and account questions** — "What is my portfolio worth?", "How are my metals
+  doing?", "What is my margin status?", "Is my KYC verification complete?"
+- **Follow-ups** — "and the profit?", "what about metals?" — resolved against the recent
+  turns passed in with each request
 
 Answers are grounded in retrieved context — product docs, FAQ content, policy text, and the user's
 own in-app state — rather than generated free-hand. That grounding is the *RAG* in LocalRAG, and
@@ -40,8 +43,10 @@ app** (`:app`), which is the library's first consumer:
 
 - Fintech UI — portfolio home and category detail screens backed by repository data.
 - Assistant — a chat surface answering portfolio questions from formatted data (figures are
-  rendered, never generated) and documentation questions through the library's retrieval and
-  generation pipeline, with a pushed Gemma model.
+  rendered, never generated) and documentation questions through agent turns over the
+  library, with a pushed Gemma model. Turns show a working card with live tool steps while
+  running and expandable function/document details afterwards; anything unanswerable meets
+  a fixed fallback, never a guess.
 - Documentation search screen driving the library's `retrieveOnly`, plus a Markdown corpus in
   `app/src/main/docs` that the Gradle plugin indexes into the app bundle at build time.
 
@@ -77,53 +82,35 @@ depends on `domain`; `data` depends on `domain`; `domain` depends on nothing.
 
 **Layer rules:**
 
-- **domain** — pure Kotlin. Entities, repository *interfaces*, and use cases (one public
-  `operator fun invoke` each). No Android or framework types, no Compose, no Room/Retrofit.
-- **data** — implements the domain repository interfaces. Owns data sources (local index, local
-  store, any remote API), DTOs, and mappers between DTO ↔ domain entity. Domain types never leak
-  DTOs outward.
-- **presentation** — Compose screens are stateless and driven by an immutable UI state exposed as
-  `StateFlow` from a ViewModel. ViewModels call use cases, never repositories or data sources
-  directly. User actions go in as UI events.
+- **domain** — pure Kotlin. Entities, repository *interfaces*, and assistant models. No Android
+  or framework types, no Compose, no Room/Retrofit.
+- **data** — implements the domain repository interfaces, plus the assistant's tool
+  definitions and prompt copy. Owns data sources, DTOs, and mappers between DTO ↔ domain
+  entity. Domain types never leak DTOs outward.
+- **presentation** (`ui/`) — Compose screens are stateless and driven by an immutable UI state
+  exposed as `StateFlow` from a ViewModel. ViewModels call use cases, never repositories or
+  data sources directly — except the chat screen, which drives the LocalRAG SDK and the
+  app-owned tools directly. User actions go in as UI events.
 
-**Package layout** (target — not yet created):
+Feature packages under `ui/` group screen + ViewModel + UI state together; `domain` and
+`data` are grouped by layer-then-type. The on-disk layout is shown under Current layout
+below.
 
-```
-com.ayushig.localrag/
-├── di/                          # dependency injection modules
-├── core/                        # shared utilities, Result/error types, common UI
-├── domain/
-│   ├── model/                   # Account, Transaction, KycStatus, Answer, SourceRef …
-│   ├── repository/              # AccountRepository, AssistantRepository … (interfaces)
-│   └── usecase/                 # GetAccountSummary, AskAssistant, RetrieveContext …
-├── data/
-│   ├── local/                   # on-device store + knowledge index
-│   ├── remote/                  # API clients, if any
-│   ├── dto/
-│   ├── mapper/
-│   └── repository/              # *RepositoryImpl
-└── presentation/
-    ├── theme/                   # (currently ui/theme — to be moved)
-    ├── navigation/
-    ├── accounts/                # AccountsScreen + AccountsViewModel + AccountsUiState
-    ├── transactions/
-    ├── profile/
-    └── assistant/               # chat surface, AssistantViewModel
-```
-
-Feature packages under `presentation/` group screen + ViewModel + UI state together; `domain` and
-`data` are grouped by layer-then-type as above.
-
-**The assistant path through the layers:** a question enters `AssistantViewModel` → `AskAssistant`
-use case → `AssistantRepository` → retrieve from the local knowledge index and the user's app
-state → assemble context → generate a grounded answer → back out as UI state with the source
-references the answer was built from.
+**The assistant path through the layers:** a question enters `ChatViewModel`, which assembles
+the recent turns as history and calls the SDK's `runAgent` with the app's tool definitions.
+The SDK plans tool calls in a strict grammar, executes them against `data/` (portfolio
+repository, `retrieveOnly` over the local bundle), gates the final text, and returns an
+outcome. The ViewModel streams the text into UI state with the tool calls and source
+titles the answer was built from, and the chat screen renders them as expandable details.
 
 **Decided, and built:**
 
 - DI framework — Hilt, wired up in `di/`
-- Embedding model and on-device inference runtime — EmbeddingGemma + Gemma 4 E2B IT on LiteRT-LM,
-  pinned to the same version at build time and on device
+- On-device inference runtime — Gemma 4 E2B IT on LiteRT-LM, pushed to the device with
+  `scripts/push_model.sh`
+- Retrieval is BM25-only by default; the embedding path (build-time sidecar plus runtime
+  `QueryEmbedder`) exists but no embedding model ships, so hybrid retrieval is unproven
+  on device
 - Vector store — brute-force dot product over normalized vectors in `localrag-core`, no database
 - Generation runs fully on-device; retrieved context never leaves the phone
 - The knowledge corpus lives in the host app (`app/src/main/docs`) and is indexed by the
@@ -152,6 +139,15 @@ references the answer was built from.
 
 Or open the project in Android Studio and run the `app` configuration.
 
+## Verifying the assistant
+
+```bash
+./gradlew :app:generateLocalRagBundle   # rebuild the docs bundle only
+python3 tools/agent-poc/agent_poc.py demo   # gate + sizes, no device needed
+./maestro/run_assistant_tests.sh        # on-device Q&A suite (model must be pushed);
+                                        # writes maestro/report/ with screenshots + logcat
+```
+
 ## Current layout
 
 What exists on disk today. The library modules are documented in `AGENTS.md`.
@@ -159,17 +155,22 @@ What exists on disk today. The library modules are documented in `AGENTS.md`.
 ```
 app/src/main/java/com/ayushig/localrag/demo/
 ├── core/                    # shared formatting (figures are rendered, never generated)
-├── domain/                  # entities, repository interfaces, use cases — no Android imports
-│   ├── model/               # portfolio + assistant models
-│   └── usecase/             # one public `invoke` each (AskAssistant, portfolio queries…)
+├── domain/                  # entities, repository interfaces, assistant models — no Android imports
+│   ├── assistant/           # fixed fallback copy
+│   ├── model/               # portfolio models, chat transcript, tool-call records
+│   ├── repository/          # repository interfaces
+│   └── usecase/portfolio/   # one portfolio use case per screen query
 ├── data/                    # repository implementations, local stores, DTOs + mappers
+│   ├── assistant/           # tool definitions, agent prompt copy
+│   ├── portfolio/           # fake data + calculations
+│   └── repository/          # fake portfolio repository
 ├── di/                      # Hilt modules (LocalRagModule provides the singleton LocalRag)
 └── ui/                      # screens, ViewModels, navigation, theme
-    ├── chat/                # assistant surface, drives runAgent() turns
+    ├── chat/                # assistant surface: working card, turn details, suggestions
     ├── docs/                # documentation search over retrieveOnly()
     └── portfolio/           # home + category detail screens
 app/src/main/docs/           # Markdown corpus indexed by the plugin at build time
-app/src/main/localrag-clusters.json  # precomputed (human-written) answers
+app/src/main/localrag-clusters.json  # precomputed answers, written into the bundle
 ```
 
 ## Conventions
@@ -177,8 +178,9 @@ app/src/main/localrag-clusters.json  # precomputed (human-written) answers
 - New code goes in `ui` / `domain` / `data`, following the existing packages.
 - A Compose screen takes UI state and event lambdas as parameters; it does not reach for a
   ViewModel itself beyond the top-level route composable.
-- One use case per user-meaningful operation, named as a verb phrase (`GetAccountSummary`,
-  `AskAssistant`).
+- One use case per screen query on the portfolio side, named as a verb phrase
+  (`GetPortfolioSummary`, `FindHoldingBySymbol`). The chat screen has no use cases; it drives
+  the SDK agent loop directly.
 - `domain` stays free of Android imports — if a domain file needs `android.*`, the abstraction is
   in the wrong layer.
 - Repository interfaces live in `domain/repository`; their implementations live in

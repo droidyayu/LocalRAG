@@ -19,7 +19,9 @@ LocalRAG/
 │   └── localrag-gradle-plugin/ plugin id com.ayushig.localrag
 ├── localrag-android/           the AAR, namespace com.ayushig.localrag.android
 ├── app/                        demo host, com.ayushig.localrag.demo
-└── tools/embed/                embedding sidecar scripts
+├── tools/embed/                embedding sidecar scripts
+├── tools/agent-poc/            stdlib Python PoC: context sizes, gate replays, prompt A/B
+└── maestro/                    on-device assistant acceptance suite + report runner
 ```
 
 A Gradle plugin cannot be applied by a sibling project in the same build, and `buildSrc` cannot be
@@ -49,25 +51,37 @@ the included project.
 ### Demo app
 
 MVVM plus clean architecture, `presentation` → `domain` ← `data`, domain depends on nothing. The
-app uses `ui/` rather than `presentation/`. ViewModels call use cases, never repositories. Screens
-are stateless and take an immutable state plus event lambdas.
+app uses `ui/` rather than `presentation/`. ViewModels call use cases, never repositories — the
+chat screen is the exception: it drives the SDK (`runAgent`, `retrieveOnly`) and the app-owned
+tools directly, since the deleted assistant use-case tier lived there. Screens are stateless
+and take an immutable state plus event lambdas.
 
 ## Current state
 
-All seven phases are implemented. The demo app answers portfolio questions from formatted data and
-documentation questions through the library, with generation running on a pushed Gemma model (see
-`scripts/push_model.sh`) and a documentation search screen driving `retrieveOnly`.
+The demo app answers portfolio questions from formatted data and documentation questions
+through the library, with generation running on a pushed Gemma model (see
+`scripts/push_model.sh`), follow-up turns resolved against per-call history, and a
+documentation search screen driving `retrieveOnly`.
 
 Architecture split: the SDK is a stateless engine. It hosts LiteRT-LM, loads bundles,
-retrieves, generates one-shot answers on fresh per-call conversations, runs the output gate, and
-provides the configurable agent runner (`runAgent(query, AgentConfig)`); its only shared mutable
-state is the single-flight guard, and loaded models/bundle are read-only resources. All business
-logic lives in the app: tool definitions and figure rendering (`AssistantToolDefinitions`),
-prompt copy (`AGENT_SYSTEM_PROMPT` in `AgentPrompts.kt`), transcript labels, and all UI. The
-keyword router, templates, echo-era engine shims, and settings debug UI are deleted — with no
-model on device the assistant says it has no information rather than guessing. The composed
-precomputed → generated → extractive pipeline is deleted with them: uncalled after the agent
-cutover, docs Q&A now runs through `runAgent` with the host app's tools.
+retrieves, runs the generator inside agent turns on fresh per-call conversations, gates every
+final text through the output gate, and exposes the configurable agent runner
+(`runAgent(query, AgentConfig, history, onEvent)`), which emits `AgentEvent` progress
+(thinking, tool calls, judging) for the host's activity UI; earlier turns ride along per
+call (capped by `maxHistoryChars`) but never ground an answer; its only shared mutable
+state is the single-flight guard, and loaded models/bundle are read-only resources. All
+business logic lives in the app: tool definitions and figure rendering
+(`AssistantToolDefinitions`), prompt copy (`AGENT_SYSTEM_PROMPT` in `AgentPrompts.kt`),
+status copy, and all UI — including the working card, the expandable per-turn details,
+and the suggestion starters. The keyword router, templates, echo-era engine shims, settings
+debug UI, and the composed precomputed → generated → extractive pipeline are all deleted:
+docs Q&A runs through `runAgent` with the host app's tools, and with no model on device the
+assistant says it has no information rather than guessing.
+
+The gate compares figures verbatim and trims sentence-final periods off number tokens, so a
+correctly restated sentence-final figure passes while a rounded one still fails
+(`figureToken`, with regression tests). The transcript seeds the system prompt every round,
+so rounds 2+ still see the grammar, not just accumulated history.
 
 - **Embedder (phase 4).** Neither candidate from the original plan: LiteRT-LM ships an
   `EmbeddingEngine`, so runtime queries embed through it (`QueryEmbedder`) and build-time
@@ -81,12 +95,15 @@ cutover, docs Q&A now runs through `runAgent` with the host app's tools.
   refused); one in-flight call at a time is enforced by `SingleFlight` (a new call cancels the
   previous). Both models unload on `onTrimMemory(TRIM_MEMORY_COMPLETE)` and the library keeps
   retrieving from BM25.
-- **Clusters (phase 6).** `clustersFile` feeds precomputed answers matched by BM25 over the
-  questions, so they work with no models loaded.
-- **Eval (phase 7).** `queries.tsv` (~105 queries) asserts hit-rate@1 ≥ 70% and hit-rate@4 ≥ 85%;
-  plus a golden byte-identical bundle test, a BM25 snapshot round-trip parity test, and a printed
-  fixture ranking for human review. Degradation behavior (BM25-only, no generator) is expressed in
-  the `Ready` state flags rather than a separate matrix, deliberately instead of instrumented tests.
+- **Clusters (phase 6).** `clustersFile` writes precomputed answers into the bundle, but no
+  runtime consumer reads them since the pipeline cutover — matching is future work.
+- **Eval (phase 7).** Bundle side: `queries.tsv` asserts hit-rate@1 ≥ 70% and hit-rate@4 ≥ 85%
+  (`EvalHarnessTest`), plus a golden byte-identical bundle test, a BM25 snapshot round-trip
+  parity test, and a printed fixture ranking for human review. Assistant side:
+  `maestro/` drives the real UI through ten questions and writes a report with screenshots
+  and logcat; `tools/agent-poc/` measures context and replays turns through a gate port.
+  Degradation behavior (BM25-only, no generator) is expressed in the `Ready` state flags
+  rather than a separate matrix, deliberately instead of instrumented tests.
 
 Recorded deviations from the original plan: the extension splits `sidecarCommand` into
 `sidecarExecutable` / `sidecarScript` / `sidecarArguments` (the script is a content-tracked file
@@ -106,6 +123,12 @@ promote noise.
 ```
 
 Add `-PlocalRagEmbed=true` to exercise the embedding path with the deterministic hash sidecar.
+
+```bash
+python3 tools/agent-poc/agent_poc.py self-test   # gate/port checks, no device needed
+python3 tools/agent-poc/agent_poc.py demo        # scripted turns with sizes + verdicts
+./maestro/run_assistant_tests.sh                 # on-device suite; writes maestro/report/
+```
 
 Kotlin 2.3.20 · AGP 9.3.2 · Gradle 9.5 · Compose BOM 2025.12.00 · minSdk 26 · target/compileSdk 37.
 `localrag-core` compiles on JDK 17 but emits Java 11 bytecode, because the Android consumers

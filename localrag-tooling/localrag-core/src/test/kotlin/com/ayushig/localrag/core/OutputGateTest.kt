@@ -49,6 +49,30 @@ class OutputGateTest {
     }
 
     @Test
+    fun `a figure ending a sentence still matches its passage`() {
+        // Regression: the number pattern swallows the sentence-final period, so without
+        // trimming, a correctly restated figure reads as invented and the turn falls back.
+        assertEquals(
+            OutputGate.Verdict.Allowed,
+            OutputGate.check(
+                "Your portfolio is worth $12,340.00.",
+                listOf("total value: $12,340.00"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a rounded sentence-final figure is still rejected`() {
+        val verdict = assertIs<OutputGate.Verdict.Rejected>(
+            OutputGate.check(
+                "Your portfolio is worth about $12,340.",
+                listOf("total value: $12,340.00"),
+            ),
+        )
+        assertEquals(OutputGate.Reason.UNGROUNDED_DIGIT, verdict.reason)
+    }
+
+    @Test
     fun `advisory language is rejected`() {
         listOf(
             "You should place a GTT order for one year.",

@@ -1,0 +1,74 @@
+# Assistant acceptance suite: portfolio answers come from account data.
+#
+# Every check asserts a fixed, code-owned string — never model wording:
+#   "from your account"  proves a portfolio tool grounded the turn.
+# The reply figures themselves are verified from the screenshots + logcat
+# the runner script collects, not from here.
+
+appId: com.ayushig.localrag.demo
+---
+- launchApp:
+    appId: com.ayushig.localrag.demo
+# Cold start lands on the Portfolio tab; the assistant lives under Assistant.
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: ${READY_LABEL}
+    timeout: 300000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Total value and P&L.
+- tapOn: "Ask something"
+- inputText: 'What is my portfolio worth?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Category rollup.
+- tapOn: "Ask something"
+- inputText: 'How are my metals doing?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Margin figures.
+- tapOn: "Ask something"
+- inputText: 'What is my margin status?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Single-holding lookup by metal name.
+- tapOn: "Ask something"
+- inputText: 'Do I hold any gold?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 180000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Lookup with no name must not guess: fixed fallback, word for word.
+- tapOn: "Ask something"
+- inputText: 'Find my holding'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: >-
+      I don't have information on that yet. I can answer questions about your portfolio
+      and the help documentation — try rephrasing, or check the Retrieval tab to see
+      what the docs cover.
+    timeout: 180000

@@ -34,7 +34,22 @@ data class AgentConfig(
     val tools: List<ToolDefinition>,
     val maxToolRounds: Int = 3,
     val maxConversationalChars: Int = 200,
+    /**
+     * How much earlier conversation rides along, oldest dropped first. Measured context
+     * runs ~500 tokens for a full turn, so this buys many turns of follow-ups cheaply —
+     * and bounds the worst case no matter how long the chat gets.
+     */
+    val maxHistoryChars: Int = 1500,
 )
+
+/**
+ * One earlier turn, passed in per call so follow-ups ("what about metals?", "how much of
+ * that is in stocks?") resolve. Data, not memory: the SDK retains nothing between calls,
+ * and history never counts as grounding evidence — only fresh tool observations do.
+ */
+enum class AgentRole { USER, MODEL }
+
+data class AgentMessage(val role: AgentRole, val text: String)
 
 /** What an agent turn produced. The host app renders Final and shows fixed text for the rest. */
 sealed interface AgentOutcome {

@@ -1,0 +1,50 @@
+# Assistant acceptance suite: honesty paths and cancellation.
+#
+# Greetings carry no tools and no sources, so there is no positive label to wait on:
+# the turn is over when the working status is gone, and the check is that no source
+# label and no fallback appeared. Screenshots (taken by the runner script) carry the
+# actual wording for human review.
+
+appId: com.ayushig.localrag.demo
+---
+- launchApp:
+    appId: com.ayushig.localrag.demo
+# Cold start lands on the Portfolio tab; the assistant lives under Assistant.
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: ${READY_LABEL}
+    timeout: 300000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Small talk: answered, not labelled, not a fallback.
+- tapOn: "Ask something"
+- inputText: 'Hi'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    notVisible: "Thinking…"
+    timeout: 180000
+- assertNotVisible: "no matching information"
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Advice is refused with the fixed policy sentence, never softened or answered.
+- tapOn: "Ask something"
+- inputText: 'Should I buy more stocks?'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "I can show you what's in your account, but I can't advise on buying or selling."
+    timeout: 180000
+- assertNotVisible: "no matching information"
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Cancellation drill: send, stop immediately, leave the state for the screenshot.
+# No assertions — the runner screenshot plus logcat show whether the turn died clean.
+- tapOn: "Ask something"
+- inputText: 'Summarise my entire portfolio in detail'
+- back # dismiss the keyboard: it covers Send
+- tapOn: "Send"
+- tapOn: "Stop"
