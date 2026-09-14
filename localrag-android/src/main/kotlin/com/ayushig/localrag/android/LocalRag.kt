@@ -49,6 +49,13 @@ class LocalRag private constructor(
          */
         val embedder: EmbedderDescriptor? = null,
         val maxOutputTokens: Int = 256,
+        /**
+         * Try the GPU backend first and fall back to CPU inside the load call. The whole
+         * turn cost is the model, and both prefill and decode run several times faster on
+         * GPU. A GPU engine that loads but generates gibberish fails a tiny probe
+         * generation and falls back too, so the preference never costs a turn.
+         */
+        val preferGpuBackend: Boolean = true,
         val topK: Int = 4,
         val categories: Set<String> = emptySet(),
         val systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
@@ -211,13 +218,14 @@ class LocalRag private constructor(
         ) { reason -> Log.w(TAG, reason) }
     }
 
-    private fun createGenerator(): Generator? {
+    private suspend fun createGenerator(): Generator? {
         val modelPath = config.generationModelPath ?: return null
         return Generator.createOrNull(
             modelPath = modelPath,
             cacheDir = config.cacheDir.path,
             systemInstruction = config.systemInstruction,
             maxOutputTokens = config.maxOutputTokens,
+            preferGpuBackend = config.preferGpuBackend,
         ) { reason -> Log.w(TAG, reason) }
     }
 

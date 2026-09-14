@@ -1,6 +1,7 @@
 package com.ayushig.localrag.demo.ui.chat
 
 import com.ayushig.localrag.android.AgentEvent
+import com.ayushig.localrag.demo.domain.model.TurnTimings
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -57,6 +58,34 @@ class AgentActivityTextTest {
         assertEquals(
             "category = " + "M".repeat(120),
             formatToolArgs(mapOf("category" to "M".repeat(200))),
+        )
+    }
+
+    @Test
+    fun `turn total reads in seconds`() {
+        assertEquals(
+            "answered in 12s",
+            formatTurnTotal(TurnTimings(totalMs = 12_000, generateMs = 11_800, toolMs = 4, rounds = 2)),
+        )
+        assertEquals(
+            "answered in 850ms",
+            formatTurnTotal(TurnTimings(totalMs = 850, generateMs = 840, toolMs = 1, rounds = 1)),
+        )
+    }
+
+    @Test
+    fun `turn breakdown names model time, function time, and steps`() {
+        assertEquals(
+            "Model 11.8s · Functions 4ms · 2 steps",
+            formatTurnBreakdown(
+                TurnTimings(totalMs = 12_000, generateMs = 11_800, toolMs = 4, rounds = 2),
+            ),
+        )
+        assertEquals(
+            "Model 840ms · Functions 1ms · 1 step",
+            formatTurnBreakdown(
+                TurnTimings(totalMs = 850, generateMs = 840, toolMs = 1, rounds = 1),
+            ),
         )
     }
 }

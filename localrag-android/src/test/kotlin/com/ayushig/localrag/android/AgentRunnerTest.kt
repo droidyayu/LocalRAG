@@ -71,7 +71,7 @@ class AgentRunnerTest {
             query = "my balance",
             config = config(emptyMap()),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -102,7 +102,7 @@ class AgentRunnerTest {
             query = "what is my portfolio worth",
             config = config(mapOf("get_portfolio_summary" to figures)),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -112,7 +112,7 @@ class AgentRunnerTest {
             query = "should i buy stocks",
             config = config(emptyMap()),
         )
-        assertEquals(AgentOutcome.Refused, answer)
+        assertTrue(answer is AgentOutcome.Refused)
     }
 
     @Test
@@ -122,7 +122,7 @@ class AgentRunnerTest {
             query = "what is my portfolio worth",
             config = config(mapOf("get_portfolio_summary" to figures)),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -132,7 +132,7 @@ class AgentRunnerTest {
             query = "close my account",
             config = config(emptyMap()),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -142,7 +142,7 @@ class AgentRunnerTest {
             query = "hello",
             config = config(emptyMap()),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -167,7 +167,7 @@ class AgentRunnerTest {
             query = "hi",
             config = config(mapOf("get_portfolio_summary" to figures)),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -179,7 +179,7 @@ class AgentRunnerTest {
             query = "what is my portfolio worth",
             config = config(mapOf("get_portfolio_summary" to figures)),
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -211,7 +211,7 @@ class AgentRunnerTest {
             config = config(emptyMap()),
             history = history,
         )
-        assertEquals(AgentOutcome.Unresolved, answer)
+        assertTrue(answer is AgentOutcome.Unresolved)
     }
 
     @Test
@@ -236,5 +236,62 @@ class AgentRunnerTest {
             ),
             events,
         )
+    }
+
+    @Test
+    fun `every outcome reports where the time went`() = runTest {
+        val final = AgentRunner().answer(
+            generate = scripted(
+                "TOOL: get_portfolio_summary",
+                "ANSWER: Your portfolio is worth $12,340.00.",
+            ),
+            query = "what is my portfolio worth",
+            config = config(mapOf("get_portfolio_summary" to figures)),
+        ) as AgentOutcome.Final
+        assertEquals(2, final.timings.rounds)
+        assertTrue(final.timings.generateMs >= 0)
+        assertTrue(final.timings.toolMs >= 0)
+        assertTrue(final.timings.totalMs >= final.timings.generateMs)
+        assertTrue(final.timings.totalMs >= final.timings.toolMs)
+
+        val unresolved = AgentRunner().answer(
+            generate = scripted("Let me think about that..."),
+            query = "what is my portfolio worth",
+            config = config(mapOf("get_portfolio_summary" to figures)),
+        ) as AgentOutcome.Unresolved
+        assertEquals(1, unresolved.timings.rounds)
+        assertTrue(unresolved.timings.totalMs >= unresolved.timings.generateMs)
+    }
+
+    @Test
+    fun `a repeated tool call forces the answer instead of looping`() = runTest {
+        var executions = 0
+        val answer = AgentRunner().answer(
+            generate = scripted(
+                "TOOL: get_portfolio_summary",
+                "TOOL: get_portfolio_summary",
+                "TOOL: get_portfolio_summary",
+                "ANSWER: Your portfolio is worth $12,340.00.",
+            ),
+            query = "what is my portfolio worth",
+            config = AgentConfig(
+                systemPrompt = "Test assistant. Reply TOOL: <name> or ANSWER: <text>.",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "get_portfolio_summary",
+                        description = "test tool",
+                        argSpec = "(no args)",
+                        execute = {
+                            executions++
+                            figures
+                        },
+                    ),
+                ),
+            ),
+        )
+        assertTrue(answer is AgentOutcome.Final)
+        // One execution and a forced answer: the second identical call ends the rounds.
+        assertEquals(1, executions)
+        assertEquals(3, (answer as AgentOutcome.Final).timings.rounds)
     }
 }

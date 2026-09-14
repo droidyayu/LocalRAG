@@ -6,6 +6,7 @@ import com.ayushig.localrag.android.AgentEvent
 import com.ayushig.localrag.android.AgentMessage
 import com.ayushig.localrag.android.AgentOutcome
 import com.ayushig.localrag.android.AgentRole
+import com.ayushig.localrag.android.AgentTimings
 import com.ayushig.localrag.core.answer.OutputGate
 
 /**
@@ -33,12 +34,32 @@ internal class AgentRunner {
         val observations = mutableListOf<String>()
         val sources = mutableListOf<String>()
         val usedTools = mutableListOf<String>()
+        var lastCall: Pair<String, Map<String, String>>? = null
+
+        // Wall-clock accounting for the turn, reported on every outcome so the host can
+        // show where the time went. currentTimeMillis, not elapsedRealtime: this also runs
+        // on the JVM under unit tests, where the Android clock is a stub that throws.
+        val started = now()
+        var generateMs = 0L
+        var toolMs = 0L
+        var rounds = 0
+        fun snapshot() = AgentTimings(now() - started, generateMs, toolMs, rounds)
+
+        /** One model call: what it said, plus what it cost. */
+        suspend fun callModel(prompt: String): Pair<String?, Long> {
+            val call = now()
+            val raw = generate(prompt)
+            val took = now() - call
+            generateMs += took
+            rounds++
+            return raw to took
+        }
 
         Log.d(TAG, "turn start: \"$query\"")
-        repeat(config.maxToolRounds) { round ->
+        for (round in 0 until config.maxToolRounds) {
             onEvent(AgentEvent.Thinking)
-            val raw = generate(transcript.prompt(query))
-            Log.d(TAG, "round $round model said: ${raw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
+            val (raw, took) = callModel(transcript.prompt(query))
+            Log.d(TAG, "round $round model said (${took}ms): ${raw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
             val parsed = AgentProtocol.parse(raw, allowedTools.keys)
             if (parsed == null) {
                 // Plain prose with no observations is a greeting, not a plan: judge it as
@@ -51,22 +72,34 @@ internal class AgentRunner {
                     !isConversationalShape(prose, config)
                 ) {
                     Log.w(TAG, "round $round: off-grammar output, ending unresolved")
-                    return AgentOutcome.Unresolved
+                    return AgentOutcome.Unresolved(snapshot())
                 }
                 Log.d(TAG, "round $round: plain prose accepted as conversational")
                 onEvent(AgentEvent.JudgingAnswer)
-                return judge(prose, query, observations, sources, usedTools, config)
+                return judge(prose, query, observations, sources, usedTools, config, snapshot())
             }
             when (parsed) {
                 is AgentProtocol.Parsed.ToolCall -> {
+                    val call = parsed.name to parsed.args
+                    if (call == lastCall) {
+                        // The model is re-asking for what it already has: the observation is
+                        // in the transcript, so another round trip only burns a full prefill
+                        // (tens of seconds on CPU) to learn nothing. Answer from it now.
+                        Log.w(TAG, "round $round: repeating tool ${parsed.name}, forcing the answer")
+                        break
+                    }
+                    lastCall = call
                     val tool = allowedTools[parsed.name]!!
                     onEvent(AgentEvent.CallingTool(parsed.name, parsed.args))
+                    val toolCall = now()
                     val observation = runCatching { tool.execute(parsed.args) }.getOrNull()
+                    val toolTook = now() - toolCall
+                    toolMs += toolTook
                     if (observation == null) {
                         Log.w(TAG, "round $round: tool ${parsed.name} failed, ending unresolved")
-                        return AgentOutcome.Unresolved
+                        return AgentOutcome.Unresolved(snapshot())
                     }
-                    Log.d(TAG, "round $round: tool ${parsed.name} ok (${observation.text.length} chars)")
+                    Log.d(TAG, "round $round: tool ${parsed.name} ok (${observation.text.length} chars, ${toolTook}ms)")
                     onEvent(
                         AgentEvent.ToolFinished(
                             parsed.name,
@@ -83,26 +116,26 @@ internal class AgentRunner {
                 is AgentProtocol.Parsed.FinalAnswer -> {
                     if (AgentProtocol.containsDirective(parsed.text)) {
                         Log.w(TAG, "round $round: answer smuggles a directive, ending unresolved")
-                        return AgentOutcome.Unresolved
+                        return AgentOutcome.Unresolved(snapshot())
                     }
                     onEvent(AgentEvent.JudgingAnswer)
-                    return judge(parsed.text, query, observations, sources, usedTools, config)
+                    return judge(parsed.text, query, observations, sources, usedTools, config, snapshot())
                 }
             }
         }
 
         onEvent(AgentEvent.Thinking)
-        val forcedRaw = generate(transcript.forceAnswer(query))
-        Log.d(TAG, "forced answer model said: ${forcedRaw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
+        val (forcedRaw, forcedTook) = callModel(transcript.forceAnswer(query))
+        Log.d(TAG, "forced answer model said (${forcedTook}ms): ${forcedRaw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
         val forced = AgentProtocol.parse(forcedRaw, allowedTools.keys)
         if (forced !is AgentProtocol.Parsed.FinalAnswer ||
             AgentProtocol.containsDirective(forced.text)
         ) {
             Log.w(TAG, "forced answer off-grammar, ending unresolved")
-            return AgentOutcome.Unresolved
+            return AgentOutcome.Unresolved(snapshot())
         }
         onEvent(AgentEvent.JudgingAnswer)
-        return judge(forced.text, query, observations, sources, usedTools, config)
+        return judge(forced.text, query, observations, sources, usedTools, config, snapshot())
     }
 
     /**
@@ -117,24 +150,25 @@ internal class AgentRunner {
         sources: List<String>,
         usedTools: List<String>,
         config: AgentConfig,
+        timings: AgentTimings,
     ): AgentOutcome {
         val answer = text.trim()
         if (answer.isEmpty()) {
             Log.w(TAG, "judge: empty answer, unresolved")
-            return AgentOutcome.Unresolved
+            return AgentOutcome.Unresolved(timings)
         }
         val evidence = observations + query.filterNot(Char::isDigit)
         return when (val verdict = OutputGate.check(answer, evidence)) {
             OutputGate.Verdict.Allowed -> {
                 Log.d(TAG, "judge: allowed (${answer.length} chars, ${observations.size} observations)")
-                AgentOutcome.Final(answer, sources.distinct(), usedTools.distinct())
+                AgentOutcome.Final(answer, sources.distinct(), usedTools.distinct(), timings)
             }
 
             is OutputGate.Verdict.Rejected ->
                 when {
                     verdict.reason == OutputGate.Reason.ADVISORY_LANGUAGE -> {
                         Log.w(TAG, "judge: refused (${verdict.detail})")
-                        AgentOutcome.Refused
+                        AgentOutcome.Refused(timings)
                     }
 
                     // No observations and no digits means no facts to hallucinate — a short,
@@ -142,12 +176,12 @@ internal class AgentRunner {
                     // refuses above; anything else here is bounded small talk.
                     observations.isEmpty() && isConversationalShape(answer, config) -> {
                         Log.d(TAG, "judge: conversational shape allowed")
-                        AgentOutcome.Final(answer, emptyList(), emptyList())
+                        AgentOutcome.Final(answer, emptyList(), emptyList(), timings)
                     }
 
                     else -> {
                         Log.w(TAG, "judge: unresolved (${verdict.reason}: ${verdict.detail})")
-                        AgentOutcome.Unresolved
+                        AgentOutcome.Unresolved(timings)
                     }
                 }
         }
@@ -201,6 +235,9 @@ internal class AgentRunner {
 
     private companion object {
         const val TAG = "LocalRagAgent"
+
+        /** Wall clock in ms. currentTimeMillis, not the Android clock: see the note in answer(). */
+        fun now(): Long = System.currentTimeMillis()
 
         const val FORCE_ANSWER_SUFFIX =
             "No more tool calls. Reply now with one ANSWER: line using only the observations above.\n"

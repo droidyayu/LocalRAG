@@ -12,6 +12,7 @@ import com.ayushig.localrag.android.AgentEvent
 import com.ayushig.localrag.android.AgentMessage
 import com.ayushig.localrag.android.AgentOutcome
 import com.ayushig.localrag.android.AgentRole
+import com.ayushig.localrag.android.AgentTimings
 import com.ayushig.localrag.android.LocalRag
 import com.ayushig.localrag.android.LocalRagState
 import com.ayushig.localrag.demo.data.LocalRagConfigFactory
@@ -20,6 +21,7 @@ import com.ayushig.localrag.demo.data.ModelSelectionStore
 import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
 import com.ayushig.localrag.demo.domain.assistant.NoInformationFallback
 import com.ayushig.localrag.demo.domain.model.ModelOption
+import com.ayushig.localrag.demo.domain.model.TurnTimings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -198,15 +200,25 @@ class ChatViewModel @Inject constructor(
                     else -> MessageSource.MODEL
                 }
                 updateMessage(replyId) {
-                    it.copy(source = source, sources = answer.sources, tools = records.toList())
+                    it.copy(
+                        source = source,
+                        sources = answer.sources,
+                        tools = records.toList(),
+                        timings = answer.timings.toTurn(),
+                    )
                 }
                 streamWords(replyId, answer.text)
             }
 
-            AgentOutcome.Refused ->
+            is AgentOutcome.Refused -> {
+                updateMessage(replyId) { it.copy(timings = answer.timings.toTurn()) }
                 streamWords(replyId, NoInformationFallback.ADVICE_REFUSAL)
+            }
 
-            AgentOutcome.Unresolved -> answerNoInformation(replyId)
+            is AgentOutcome.Unresolved -> {
+                updateMessage(replyId) { it.copy(timings = answer.timings.toTurn()) }
+                answerNoInformation(replyId)
+            }
         }
     }
 
@@ -288,9 +300,16 @@ class ChatViewModel @Inject constructor(
         loadEngine()
     }
 
+    /** The SDK reports timings; the domain model carries them without depending on the SDK. */
+    private fun AgentTimings.toTurn() = TurnTimings(totalMs, generateMs, toolMs, rounds)
+
     private companion object {
         const val TAG = "LocalRagChat"
-        const val PORTFOLIO_WORD_DELAY_MS = 35L
+        /**
+         * Simulated streaming beat. The answer is already complete when this runs, so every
+         * millisecond here is pure added latency after a slow generation — keep it a flicker.
+         */
+        const val PORTFOLIO_WORD_DELAY_MS = 12L
         /** Recent turns per call; the SDK's char budget drops older ones first anyway. */
         const val MAX_HISTORY_TURNS = 6
     }

@@ -26,4 +26,6 @@ data class ChatMessage(
     val sources: List<String> = emptyList(),
     /** The function calls behind an assistant turn, in execution order. */
     val tools: List<ToolCallRecord> = emptyList(),
+    /** Where the turn's time went; null while it runs and for user messages. */
+    val timings: TurnTimings? = null,
 )

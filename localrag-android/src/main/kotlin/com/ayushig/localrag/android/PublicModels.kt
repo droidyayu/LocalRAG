@@ -51,19 +51,34 @@ enum class AgentRole { USER, MODEL }
 
 data class AgentMessage(val role: AgentRole, val text: String)
 
+/**
+ * Where one agent turn's wall-clock time went, in milliseconds. [generateMs] is every model
+ * call added together — on CPU that is dominated by re-reading the prompt each round, since
+ * every round decodes on a fresh conversation with an empty KV cache. [toolMs] is every
+ * app function added together; these read local memory and normally round to zero.
+ */
+data class AgentTimings(
+    val totalMs: Long,
+    val generateMs: Long,
+    val toolMs: Long,
+    /** How many model calls the turn took, including the forced final answer when used. */
+    val rounds: Int,
+)
+
 /** What an agent turn produced. The host app renders Final and shows fixed text for the rest. */
 sealed interface AgentOutcome {
     data class Final(
         val text: String,
         val sources: List<String>,
         val usedTools: List<String>,
+        val timings: AgentTimings,
     ) : AgentOutcome
 
     /** Malformed output, failed tools, or a gate rejection: say the fixed fallback instead. */
-    data object Unresolved : AgentOutcome
+    data class Unresolved(val timings: AgentTimings) : AgentOutcome
 
     /** Advisory language in the final text: show the fixed refusal instead. */
-    data object Refused : AgentOutcome
+    data class Refused(val timings: AgentTimings) : AgentOutcome
 }
 
 /**

@@ -284,20 +284,30 @@ private fun MessageRow(message: ChatMessage, activity: String?) {
                     )
                 }
             }
-            if (!isUser && !message.isStreaming && message.source != MessageSource.MODEL) {
-                Text(
-                    text = when (message.source) {
-                        MessageSource.PORTFOLIO_DATA -> "from your account"
-                        MessageSource.DOCUMENTATION -> "from the help documentation"
-                        MessageSource.NO_INFORMATION -> "no matching information"
-                        MessageSource.MODEL -> ""
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp, start = 4.dp),
-                )
-                if (message.tools.isNotEmpty() || message.sources.isNotEmpty()) {
-                    TurnDetails(message)
+            if (!isUser && !message.isStreaming) {
+                if (message.source != MessageSource.MODEL) {
+                    Text(
+                        text = when (message.source) {
+                            MessageSource.PORTFOLIO_DATA -> "from your account"
+                            MessageSource.DOCUMENTATION -> "from the help documentation"
+                            MessageSource.NO_INFORMATION -> "no matching information"
+                            MessageSource.MODEL -> ""
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp, start = 4.dp),
+                    )
+                    if (message.tools.isNotEmpty() || message.sources.isNotEmpty()) {
+                        TurnDetails(message)
+                    }
+                }
+                message.timings?.let { timings ->
+                    Text(
+                        text = formatTurnTotal(timings),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp, start = 4.dp),
+                    )
                 }
             }
         }
@@ -385,6 +395,14 @@ private fun TurnDetails(message: ChatMessage) {
             )
         }
         if (expanded) {
+            message.timings?.let { timings ->
+                Text(
+                    text = formatTurnBreakdown(timings),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
             message.tools.forEach { record -> ToolDetail(record) }
             message.sources.forEach { source ->
                 Text(

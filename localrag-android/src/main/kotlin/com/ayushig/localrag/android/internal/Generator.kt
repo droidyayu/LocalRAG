@@ -1,5 +1,6 @@
 package com.ayushig.localrag.android.internal
 
+import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import java.util.concurrent.atomic.AtomicBoolean
 import com.google.ai.edge.litertlm.Contents
@@ -69,15 +70,24 @@ internal class Generator private constructor(
     )
 
     companion object {
+        private const val TAG = "LocalRagGenerator"
 
         /**
-         * Blocking for several seconds. Callers must already be off the main thread.
+         * Blocking for several seconds, plus one tiny probe generation when trying GPU.
+         * Callers must already be off the main thread.
+         *
+         * GPU first when asked: prefill and decode both run several times faster there, and
+         * this turn's whole cost is the model. A GPU engine that loads is not necessarily
+         * one that generates — on some devices it decodes gibberish or nothing, which would
+         * turn every turn unresolved — so the probe below decides, and anything but an
+         * exact OK falls back to CPU inside this call.
          */
-        fun createOrNull(
+        suspend fun createOrNull(
             modelPath: String,
             cacheDir: String,
             systemInstruction: String,
             maxOutputTokens: Int,
+            preferGpuBackend: Boolean,
             onFailure: (String) -> Unit,
         ): Generator? {
             if (!EngineSlot.acquire()) {
@@ -87,25 +97,79 @@ internal class Generator private constructor(
                 )
                 return null
             }
-            return try {
+            // Null when this backend cannot carry the model. Slot ownership stays with
+            // this caller: it releases exactly once, after the last backend has been tried.
+            var lastError = "unknown load error"
+            fun loadOn(backend: Backend): Engine? = try {
                 val engine = Engine(
                     EngineConfig(
                         modelPath = modelPath,
-                        backend = Backend.CPU(),
+                        backend = backend,
                         cacheDir = cacheDir,
                     ),
                 )
                 engine.initialize()
-                Generator(engine, systemInstruction, maxOutputTokens)
+                engine
             } catch (failure: LiteRtLmJniException) {
-                EngineSlot.release()
-                onFailure("generation engine failed to load: ${failure.message}")
+                lastError = failure.message ?: "native load failed"
                 null
             } catch (failure: IllegalStateException) {
-                EngineSlot.release()
-                onFailure("generation engine failed to load: ${failure.message}")
+                lastError = failure.message ?: "load failed"
                 null
             }
+            if (preferGpuBackend) {
+                val gpu = loadOn(Backend.GPU())
+                if (gpu != null && probeBackend(gpu)) {
+                    Log.i(TAG, "generation engine on GPU backend")
+                    return Generator(gpu, systemInstruction, maxOutputTokens)
+                }
+                if (gpu != null) {
+                    Log.w(TAG, "GPU backend failed its probe, closing it and falling back to CPU")
+                    runCatching { gpu.close() }
+                } else {
+                    Log.w(TAG, "GPU backend failed ($lastError), falling back to CPU")
+                }
+            }
+            val engine = loadOn(Backend.CPU()) ?: run {
+                EngineSlot.release()
+                onFailure("generation engine failed to load: $lastError")
+                return null
+            }
+            Log.i(TAG, "generation engine on CPU backend")
+            return Generator(engine, systemInstruction, maxOutputTokens)
+        }
+
+        /**
+         * One tiny generation on a throwaway conversation: a working backend reads back
+         * OK, a broken one decodes gibberish or nothing. Bounded to 8 output tokens, so
+         * even a slow backend answers in seconds. False means fall back, never retry.
+         */
+        private suspend fun probeBackend(engine: Engine): Boolean = try {
+            val probe = engine.createConversation(
+                ConversationConfig(
+                    systemInstruction = Contents.of("Reply with exactly: OK"),
+                    samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
+                    maxOutputToken = 8,
+                ),
+            )
+            try {
+                val out = probe.sendMessageAsync("ping").toList().joinToString("") { it.toString() }
+                val ok = out.contains("OK")
+                if (ok) {
+                    Log.i(TAG, "GPU probe passed")
+                } else {
+                    Log.w(TAG, "GPU probe replied: ${out.take(80)}")
+                }
+                ok
+            } finally {
+                runCatching { probe.close() }
+            }
+        } catch (failure: LiteRtLmJniException) {
+            Log.w(TAG, "GPU probe failed: ${failure.message}")
+            false
+        } catch (failure: IllegalStateException) {
+            Log.w(TAG, "GPU probe failed: ${failure.message}")
+            false
         }
     }
 }
