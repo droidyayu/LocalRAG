@@ -50,13 +50,24 @@ class OutputGateTest {
 
     @Test
     fun `a figure ending a sentence still matches its passage`() {
-        // Regression: the number pattern swallows the sentence-final period, so without
-        // trimming, a correctly restated figure reads as invented and the turn falls back.
+        // Regression: the number pattern used to swallow the sentence-final period, so a
+        // correctly restated figure read as invented and the turn fell back.
         assertEquals(
             OutputGate.Verdict.Allowed,
             OutputGate.check(
                 "Your portfolio is worth $12,340.00.",
                 listOf("total value: $12,340.00"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a figure followed by a comma still matches its passage`() {
+        assertEquals(
+            OutputGate.Verdict.Allowed,
+            OutputGate.check(
+                "Your total value is $12,340.00, with a profit of $1,240.00.",
+                listOf("total value: $12,340.00\ntotal profit and loss: +$1,240.00"),
             ),
         )
     }

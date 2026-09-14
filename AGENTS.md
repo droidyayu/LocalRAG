@@ -59,9 +59,10 @@ and take an immutable state plus event lambdas.
 ## Current state
 
 The demo app answers portfolio questions from formatted data and documentation questions
-through the library, with generation running on a pushed Gemma model (see
-`scripts/push_model.sh`), follow-up turns resolved against per-call history, and a
-documentation search screen driving `retrieveOnly`.
+through the library, with generation running on the selected pushed model — Gemma 4 E2B IT
+or Gemma 3 270M IT (see `scripts/push_model.sh e2b|270m`, switchable in the overflow menu) —
+follow-up turns resolved against per-call history, and a documentation search screen driving
+`retrieveOnly`.
 
 Architecture split: the SDK is a stateless engine. It hosts LiteRT-LM, loads bundles,
 retrieves, runs the generator inside agent turns on fresh per-call conversations, gates every
@@ -78,10 +79,10 @@ debug UI, and the composed precomputed → generated → extractive pipeline are
 docs Q&A runs through `runAgent` with the host app's tools, and with no model on device the
 assistant says it has no information rather than guessing.
 
-The gate compares figures verbatim and trims sentence-final periods off number tokens, so a
-correctly restated sentence-final figure passes while a rounded one still fails
-(`figureToken`, with regression tests). The transcript seeds the system prompt every round,
-so rounds 2+ still see the grammar, not just accumulated history.
+The gate compares figures verbatim, and number tokens must end in a digit, so trailing
+punctuation (sentence periods, list commas) never glues onto a figure and reads as invented —
+while a rounded figure still fails (regression tests cover both). The transcript seeds the
+system prompt every round, so rounds 2+ still see the grammar, not just accumulated history.
 
 - **Embedder (phase 4).** Neither candidate from the original plan: LiteRT-LM ships an
   `EmbeddingEngine`, so runtime queries embed through it (`QueryEmbedder`) and build-time

@@ -31,8 +31,11 @@ Replay transcript format (device output pasted by hand):
 
 import argparse
 import math
+import os
 import re
 import sys
+import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -125,7 +128,8 @@ def conversational_shape(text, limit=200):
 # ---------------------------------------------------------------- gate
 # Port of OutputGate.check with default Config (overlap 0.5, max 1200 chars).
 
-NUMBER = re.compile(r"\d[\d,.]*")
+# Tokens must end in a digit: separators live inside figures, never at the edge.
+NUMBER = re.compile(r"\d(?:[\d,.]*\d)?")
 ADVISORY = [
     "should you", "you should", "we recommend", "i recommend", "our advice",
     "will rise", "will fall", "will go up", "will go down", "good time to",
@@ -133,12 +137,6 @@ ADVISORY = [
     "you ought to", "is likely to increase", "is likely to decrease",
     "guaranteed",
 ]
-
-
-def figure_token(raw):
-    # Port of OutputGate.figureToken: the number pattern swallows a
-    # sentence-final period, which is punctuation, not part of the figure.
-    return raw.rstrip(".")
 
 
 def gate_check(answer, passages, minimum_overlap=0.5, max_chars=1200):
@@ -149,8 +147,8 @@ def gate_check(answer, passages, minimum_overlap=0.5, max_chars=1200):
         return ("REJECTED", "TOO_LONG", f"{len(text)} characters")
     source_numbers = set()
     for passage in passages:
-        source_numbers.update(figure_token(m.group(0)) for m in NUMBER.finditer(passage))
-    invented = sorted({figure_token(m.group(0)) for m in NUMBER.finditer(text)} - source_numbers)
+        source_numbers.update(m.group(0) for m in NUMBER.finditer(passage))
+    invented = sorted({m.group(0) for m in NUMBER.finditer(text)} - source_numbers)
     if invented:
         return ("REJECTED", "UNGROUNDED_DIGIT", "not present: " + ", ".join(invented))
     for phrase in ADVISORY:
@@ -186,14 +184,22 @@ Tools:
 - find_holding | query=<name or symbol> : one holding's figures
 - search_documentation | query=<question> : help passages; cite nothing beyond them
 
-Rules: never write a number that is not in the observations. Copy every figure character-for-character exactly as shown, cents and commas included ($12,340.00, never $12,340) — a rounded figure is a different figure. Use only words from the observations; do not explain or add background. The ANSWER: line is the entire reply, with nothing written before it. Never advise buying, selling or holding. For greetings or questions with no relevant tool result, still answer with ANSWER: saying briefly what you can help with.
+Rules: never write a number that is not in the observations. Copy every figure character-for-character exactly as shown, cents and commas included ($12,340.00, never $12,340) — a rounded figure is a different figure. For how, what, or why questions about the app, call search_documentation first and answer only from its passages; never answer such questions from general knowledge. Never write OBSERVATION lines yourself; observations only arrive from tool results. Use only words from the observations; do not explain or add background. The ANSWER: line is the entire reply, with nothing written before it. If asked whether to buy, sell, or hold something, reply with ANSWER: I can't advise on buying or selling. Questions about fees, charges, costs, or prices are documentation questions, not advice: search first, never refuse them. Never advise buying, selling or holding. For greetings or questions with no relevant tool result, still answer with ANSWER: saying briefly what you can help with. For every new question, call the tool again for fresh figures even if earlier turns already show them; earlier turns are context, never a source of figures.
 
 Example turn:
 Question: what is my portfolio worth
 TOOL: get_portfolio_summary
 OBSERVATION [get_portfolio_summary]:
 total value: $12,340.00
-ANSWER: Your portfolio is worth $12,340.00."""
+ANSWER: Your portfolio is worth $12,340.00.
+
+Example turn:
+Question: how do I deposit funds
+TOOL: search_documentation | query=how do I deposit funds
+OBSERVATION [search_documentation]:
+How do I add funds? — overview
+Transfer from a bank account held in your own name. Funds usually arrive within one working day.
+ANSWER: Transfer from a bank account held in your own name. Funds usually arrive within one working day."""
 
 # Demo observation: the worked example's figures.
 DEMO_OBSERVATION = """total value: $12,340.00
@@ -302,28 +308,48 @@ def history_block(history, max_chars=1500):
 
 
 def run_turn(question, replies, observations, system, history=(), max_rounds=3,
-             max_obs_chars=None):
-    """replies: list of raw model outputs consumed in order.
-    observations: dict tool name -> observation text (missing = tool failed).
-    history: list of (role, text) with role "user"/"model".
+             max_obs_chars=None, generate=None, execute=None, echo=False):
+    """replies: list of raw model outputs consumed in order (ignored when
+    generate is set). observations: dict tool name -> text (missing = failed),
+    unless execute(name, args) is given. history: list of (role, text).
     Returns the outcome string; prints sizes + verdicts along the way."""
     # Mirrors the runner: system seeded once, so every round re-reads it.
     transcript = system + history_block(history)
-    seen_obs, used = [], []
-    it = iter(replies)
+    seen_obs = []
+    it = iter(replies or [])
 
     def gen(prompt_text, label):
         size_line(f"prompt to model ({label})", prompt_text)
+        if generate is not None:
+            start = time.time()
+            out = generate(prompt_text)
+            print(f"  [model took {time.time() - start:.0f}s]")
+            if echo and out is not None:
+                print(f"  model said: {out.strip()[:300]!r}")
+            return out
         try:
             return next(it)
         except StopIteration:
             return None
 
     def judge(text):
+        # Mirrors AgentRunner.judge exactly: Allowed -> FINAL, advisory ->
+        # REFUSED, rejected-but-observation-free small talk -> FINAL, else
+        # UNRESOLVED.
+        answer = text.strip()
+        if not answer:
+            print("  judge -> UNRESOLVED (empty)")
+            return "UNRESOLVED"
         evidence = seen_obs + ["".join(ch for ch in question if not ch.isdigit())]
-        verdict = gate_check(text, evidence)
+        verdict = gate_check(answer, evidence)
         print(f"  judge -> {verdict[0]} {verdict[1]} {verdict[2]}")
-        return verdict[0] == "ALLOWED"
+        if verdict[0] == "ALLOWED":
+            return "FINAL"
+        if verdict[1] == "ADVISORY_LANGUAGE":
+            return "REFUSED"
+        if not seen_obs and conversational_shape(answer):
+            return "FINAL"
+        return "UNRESOLVED"
 
     for rnd in range(max_rounds):
         raw = gen(transcript + f"\nQuestion: {question}\n", f"round {rnd}")
@@ -335,11 +361,11 @@ def run_turn(question, replies, observations, system, history=(), max_rounds=3,
                 print("  round %d: off-grammar -> UNRESOLVED" % rnd)
                 return "UNRESOLVED"
             print("  round %d: conversational" % rnd)
-            return "FINAL" if judge(prose) else "UNRESOLVED"
+            return judge(prose)
         kind = parsed[0]
         if kind == "tool":
             _, name, args = parsed
-            obs = observations.get(name)
+            obs = execute(name, args) if execute is not None else observations.get(name)
             if obs is None:
                 print(f"  round {rnd}: tool {name} failed -> UNRESOLVED")
                 return "UNRESOLVED"
@@ -347,7 +373,6 @@ def run_turn(question, replies, observations, system, history=(), max_rounds=3,
                 obs = obs[:max_obs_chars] + "…[truncated]"
             print(f"  round {rnd}: TOOL {name} {args} ({len(obs)} obs chars)")
             seen_obs.append(obs)
-            used.append(name)
             transcript += f"TOOL: {name}\nOBSERVATION [{name}]:\n{obs}\n"
         else:
             _, text = parsed
@@ -355,7 +380,7 @@ def run_turn(question, replies, observations, system, history=(), max_rounds=3,
                 print(f"  round {rnd}: answer smuggles directive -> UNRESOLVED")
                 return "UNRESOLVED"
             print(f"  round {rnd}: ANSWER ({len(text)} chars)")
-            return "FINAL" if judge(text) else "UNRESOLVED"
+            return judge(text)
 
     raw = gen(transcript + f"\nQuestion: {question}\n" + FORCE_SUFFIX, "forced")
     parsed = parse(raw, TOOL_NAMES)
@@ -364,7 +389,7 @@ def run_turn(question, replies, observations, system, history=(), max_rounds=3,
         print("  forced answer off-grammar -> UNRESOLVED")
         return "UNRESOLVED"
     print("  forced ANSWER (%d chars)" % len(parsed[1]))
-    return "FINAL" if judge(parsed[1]) else "UNRESOLVED"
+    return judge(parsed[1])
 
 
 def read_transcript(path):
@@ -477,6 +502,50 @@ def cmd_replay(args):
     print(f"outcome: {outcome}")
 
 
+def cmd_live(args):
+    """Full turn against the real model: portfolio observations from --obs /
+    --demo-obs, documentation from BM25 over the real corpus, everything else
+    fails like a null tool result on device."""
+    from litert_generate import LiteRtGenerator
+
+    system = Path(args.prompt_file).read_text() if args.prompt_file else SYSTEM_PROMPT
+    chunks = load_corpus()
+    static_obs = {}
+    if args.demo_obs:
+        static_obs["get_portfolio_summary"] = DEMO_OBSERVATION
+    for spec in args.obs or []:
+        name, _, text = spec.partition("=")
+        static_obs[name.strip()] = text
+    history = []
+    for item in args.hist or []:
+        role, _, text = item.partition(":")
+        history.append((role.strip(), text.strip()))
+
+    def execute(name, tool_args):
+        if name == "search_documentation":
+            query = tool_args.get("query", "").strip()
+            if not query:
+                return None
+            hits = bm25_search(query, chunks, top_k=args.top_k)
+            if not hits:
+                return "no passages found"
+            return "\n---\n".join(
+                f"{c['title']} — overview\n{c['text']}" for c in hits)
+        return static_obs.get(name)
+
+    cache_dir = args.cache_dir or os.path.join(tempfile.gettempdir(), "litert-cache")
+    generator = LiteRtGenerator(args.model, system, max_output_tokens=256,
+                                cache_dir=cache_dir)
+    try:
+        outcome = run_turn(args.question, [], {}, system, history,
+                           max_obs_chars=args.max_obs_chars,
+                           generate=generator.generate, execute=execute,
+                           echo=True)
+    finally:
+        generator.close()
+    print(f"outcome: {outcome}")
+
+
 def cmd_self_test(_args):
     cases = [
         (parse("TOOL: get_portfolio_summary", TOOL_NAMES),
@@ -521,6 +590,19 @@ def main(argv=None):
     r = sub.add_parser("replay", help="replay a pasted device transcript")
     r.add_argument("--transcript", required=True)
     r.set_defaults(fn=cmd_replay)
+    lv = sub.add_parser("live", help="full turn against a real .litertlm model")
+    lv.add_argument("--question", required=True)
+    lv.add_argument("--model", required=True, help="path to .litertlm generation model")
+    lv.add_argument("--obs", action="append", metavar="NAME=TEXT",
+                    help="canned observation for a portfolio tool (repeatable)")
+    lv.add_argument("--demo-obs", action="store_true",
+                    help="use the worked-example figures for get_portfolio_summary")
+    lv.add_argument("--hist", action="append", metavar="ROLE:text",
+                    help="history turn, ROLE is user or model (repeatable)")
+    lv.add_argument("--top-k", type=int, default=4)
+    lv.add_argument("--cache-dir", default=None,
+                    help="engine cache dir (defaults to system tmp, never the repo)")
+    lv.set_defaults(fn=cmd_live)
     t = sub.add_parser("self-test", help="pin the port behavior")
     t.set_defaults(fn=cmd_self_test)
     args = ap.parse_args(argv)

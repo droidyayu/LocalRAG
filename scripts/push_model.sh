@@ -1,28 +1,70 @@
 #!/usr/bin/env bash
-# Pushes the Gemma 4 E2B IT LiteRT-LM model onto a connected device.
+# Pushes a LiteRT-LM generation model onto a connected device.
 #
-# The model is deliberately not bundled in the APK: at ~2 GB it would break the build.
-# Download it manually from https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm
-# after accepting the Gemma license. The repo is gated, so a scripted download returns an HTML
-# error page rather than the model — this script checks the file size before pushing.
+# The models are deliberately not bundled in the APK: even the small one would break the
+# build. Download the file manually from its Hugging Face repo after accepting the Gemma
+# license. Both repos are gated, so a scripted download returns an HTML error page rather
+# than the model — this script checks the file size before pushing.
 #
-# Usage: scripts/push_model.sh [path-to-model] [adb-serial]
-# The exact published filename may differ; override with MODEL_NAME=... if it does. It must
-# match ModelFileLocator.MODEL_FILE_NAME or the app will not see the pushed file.
+# Usage: scripts/push_model.sh [e2b|270m] [adb-serial]
+# The pushed filename must match ModelOption.fileName or the app will not see the file.
+# With no serial, a lone device is used as-is; when emulators crowd the list, the
+# single physical device is auto-selected. Pass a serial explicitly to override.
 
 set -euo pipefail
 
-MODEL_NAME="${MODEL_NAME:-gemma-4-E2B-it.litertlm}"
-HF_REPO="litert-community/gemma-4-E2B-it-litert-lm"
-APPLICATION_ID="com.ayushig.localrag.demo"
-MIN_BYTES=$((200 * 1024 * 1024))
+case "${1:-e2b}" in
+  e2b)
+    MODEL_NAME="gemma-4-E2B-it.litertlm"
+    HF_REPO="litert-community/gemma-4-E2B-it-litert-lm"
+    MIN_BYTES=$((1024 * 1024 * 1024))
+    ;;
+  270m)
+    MODEL_NAME="gemma3-270m-it-q8.litertlm"
+    HF_REPO="litert-community/gemma-3-270m-it"
+    MIN_BYTES=$((250 * 1024 * 1024))
+    ;;
+  *)
+    echo "Unknown model: $1 (want e2b or 270m)" >&2
+    exit 1
+    ;;
+esac
 
-SOURCE="${1:-$MODEL_NAME}"
+APPLICATION_ID="com.ayushig.localrag.demo"
+
+SOURCE="$MODEL_NAME"
 SERIAL="${2:-}"
 
 ADB=(adb)
 if [[ -n "$SERIAL" ]]; then
   ADB=(adb -s "$SERIAL")
+else
+  # No serial given: a lone device needs no disambiguation, and one physical device
+  # among emulators is the obvious target. Anything else is genuinely ambiguous.
+  READY_COUNT=0
+  PHYSICAL_COUNT=0
+  CANDIDATE=""
+  while IFS=$'\t' read -r serial state _; do
+    [[ -n "$serial" && "$state" == "device" ]] || continue
+    READY_COUNT=$((READY_COUNT + 1))
+    case "$serial" in
+      emulator-*) ;;
+      *)
+        PHYSICAL_COUNT=$((PHYSICAL_COUNT + 1))
+        CANDIDATE="$serial"
+        ;;
+    esac
+  done < <("${ADB[@]}" devices | tail -n +2)
+  if (( READY_COUNT != 1 && PHYSICAL_COUNT == 1 )); then
+    SERIAL="$CANDIDATE"
+    ADB=(adb -s "$SERIAL")
+    echo "Auto-selected physical device $SERIAL (pass a serial explicitly to target an emulator)."
+  elif (( READY_COUNT != 1 )); then
+    echo "Found $READY_COUNT ready devices and cannot pick one; pass a serial explicitly." >&2
+    "${ADB[@]}" devices >&2
+    echo "Usage: scripts/push_model.sh [e2b|270m] [adb-serial]" >&2
+    exit 1
+  fi
 fi
 
 if [[ ! -f "$SOURCE" ]]; then

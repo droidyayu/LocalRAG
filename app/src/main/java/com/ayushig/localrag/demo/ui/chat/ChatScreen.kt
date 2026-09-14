@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,9 +28,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ayushig.localrag.android.LocalRagState
 import com.ayushig.localrag.demo.domain.model.ChatMessage
 import com.ayushig.localrag.demo.domain.model.MessageSource
+import com.ayushig.localrag.demo.domain.model.ModelOption
 import com.ayushig.localrag.demo.domain.model.Role
 import com.ayushig.localrag.demo.domain.model.ToolCallRecord
 
@@ -65,6 +69,7 @@ fun ChatRoute(
         onInputChange = viewModel::onInputChange,
         onSend = viewModel::onSend,
         onSuggestion = viewModel::onSuggestion,
+        onModelSelected = viewModel::onModelSelected,
         onStop = viewModel::onStop,
         onClearChat = viewModel::onClearChat,
         onReloadEngine = viewModel::onReloadEngine,
@@ -80,6 +85,7 @@ fun ChatScreen(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onSuggestion: (String) -> Unit,
+    onModelSelected: (ModelOption) -> Unit,
     onStop: () -> Unit,
     onClearChat: () -> Unit,
     onReloadEngine: () -> Unit,
@@ -105,7 +111,8 @@ fun ChatScreen(
                     Column {
                         Text("Assistant", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = "${uiState.retrievalMode()} · litertlm ${uiState.libraryVersion}",
+                            text = "${uiState.modelOption.shortName} · " +
+                                "${uiState.retrievalMode()} · litertlm ${uiState.libraryVersion}",
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -113,6 +120,9 @@ fun ChatScreen(
                 actions = {
                     AssistChip(onClick = {}, label = { Text(uiState.engineState.label()) })
                     OverflowMenu(
+                        modelOption = uiState.modelOption,
+                        availableModels = uiState.availableModels,
+                        onModelSelected = onModelSelected,
                         onClearChat = onClearChat,
                         onReloadEngine = onReloadEngine,
                     )
@@ -123,6 +133,7 @@ fun ChatScreen(
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             if (!uiState.modelPresent) {
                 ModelMissingBanner(
+                    option = uiState.modelOption,
                     expectedPath = uiState.expectedModelPath,
                     onRetry = onRetryModelCheck,
                 )
@@ -457,10 +468,14 @@ private fun InputRow(
 
 @Composable
 private fun OverflowMenu(
+    modelOption: ModelOption,
+    availableModels: Set<ModelOption>,
+    onModelSelected: (ModelOption) -> Unit,
     onClearChat: () -> Unit,
     onReloadEngine: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(
@@ -469,6 +484,10 @@ private fun OverflowMenu(
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Model: ${modelOption.shortName}") },
+                onClick = { expanded = false; picking = true },
+            )
             DropdownMenuItem(
                 text = { Text("Clear chat") },
                 onClick = { expanded = false; onClearChat() },
@@ -479,6 +498,66 @@ private fun OverflowMenu(
             )
         }
     }
+    if (picking) {
+        ModelPickerDialog(
+            selected = modelOption,
+            availableModels = availableModels,
+            onSelect = { picking = false; onModelSelected(it) },
+            onDismiss = { picking = false },
+        )
+    }
+}
+
+/**
+ * Pushed models only: a missing file cannot run, so it shows its size and the push
+ * command instead of a radio option.
+ */
+@Composable
+private fun ModelPickerDialog(
+    selected: ModelOption,
+    availableModels: Set<ModelOption>,
+    onSelect: (ModelOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assistant model") },
+        text = {
+            Column {
+                ModelOption.entries.forEach { option ->
+                    val present = option in availableModels
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    ) {
+                        RadioButton(
+                            selected = option == selected,
+                            enabled = present,
+                            onClick = { if (present) onSelect(option) },
+                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text(
+                                text = option.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = if (present) {
+                                    "on device"
+                                } else {
+                                    "${option.approxSize} — push with scripts/push_model.sh"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
 }
 
 private fun LocalRagState.label(): String = when (this) {

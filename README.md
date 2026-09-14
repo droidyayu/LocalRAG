@@ -106,8 +106,9 @@ titles the answer was built from, and the chat screen renders them as expandable
 **Decided, and built:**
 
 - DI framework — Hilt, wired up in `di/`
-- On-device inference runtime — Gemma 4 E2B IT on LiteRT-LM, pushed to the device with
-  `scripts/push_model.sh`
+- On-device inference runtime — Gemma 4 E2B IT or Gemma 3 270M IT on LiteRT-LM, pushed
+  with `scripts/push_model.sh e2b|270m` and switchable in the assistant's overflow menu
+  (the small model runs the same grammar, tools, and gate, just faster and weaker)
 - Retrieval is BM25-only by default; the embedding path (build-time sidecar plus runtime
   `QueryEmbedder`) exists but no embedding model ships, so hybrid retrieval is unproven
   on device

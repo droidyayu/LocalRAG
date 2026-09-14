@@ -30,7 +30,7 @@ import kotlinx.coroutines.withContext
  */
 class LocalRag private constructor(
     private val context: Context,
-    private val config: Config,
+    private var config: Config,
     private val signatureVerifier: SignatureVerifier,
 ) {
 
@@ -177,6 +177,16 @@ class LocalRag private constructor(
         retriever = null
         bundle = null
         _state.value = LocalRagState.Idle
+    }
+
+    /**
+     * Replaces the config, unloading everything first. The next [initialize] loads under
+     * the new config — this is how the host switches models without rebuilding the engine
+     * owner. In-flight calls are the caller's problem: cancel them first.
+     */
+    fun updateConfig(config: Config) {
+        release()
+        this.config = config
     }
 
     private fun createEmbedder(bundle: Bundle): QueryEmbedder? {

@@ -16,15 +16,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.ayushig.localrag.demo.domain.model.ModelOption
 
 /**
- * Shown above the transcript when the model file is absent.
+ * Shown above the transcript when the selected model file is absent.
  *
  * It is a banner rather than a full-screen block because account questions are answered from
  * repository data and work perfectly well without a model loaded.
  */
 @Composable
 fun ModelMissingBanner(
+    option: ModelOption,
     expectedPath: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
@@ -45,7 +47,7 @@ fun ModelMissingBanner(
             )
             if (expanded) {
                 Text(
-                    text = "Push the 304 MB model to:",
+                    text = "Push the ${option.approxSize} ${option.displayName} model to:",
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(top = 8.dp),
                 )
@@ -55,9 +57,8 @@ fun ModelMissingBanner(
                     fontFamily = FontFamily.Monospace,
                 )
                 Text(
-                    text = "Download it from huggingface.co/litert-community/gemma-4-E2B-it-litert-lm " +
-                        "after accepting the Gemma license, and check the file size before " +
-                        "trusting it.",
+                    text = "Download it from huggingface.co/${option.hfRepo} after accepting " +
+                        "the Gemma license, and check the file size before trusting it.",
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )

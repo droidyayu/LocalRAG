@@ -14,9 +14,12 @@ import com.ayushig.localrag.android.AgentOutcome
 import com.ayushig.localrag.android.AgentRole
 import com.ayushig.localrag.android.LocalRag
 import com.ayushig.localrag.android.LocalRagState
+import com.ayushig.localrag.demo.data.LocalRagConfigFactory
 import com.ayushig.localrag.demo.data.ModelFileLocator
+import com.ayushig.localrag.demo.data.ModelSelectionStore
 import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
 import com.ayushig.localrag.demo.domain.assistant.NoInformationFallback
+import com.ayushig.localrag.demo.domain.model.ModelOption
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -32,15 +35,21 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val modelFileLocator: ModelFileLocator,
+    private val selectionStore: ModelSelectionStore,
+    private val configFactory: LocalRagConfigFactory,
     private val agentConfig: AgentConfig,
     private val localRag: LocalRag,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         ChatUiState(
+            modelOption = configFactory.selected(),
+            availableModels = ModelOption.entries.filterTo(mutableSetOf()) {
+                modelFileLocator.isPresent(it)
+            },
             libraryVersion = BuildConfig.LITERTLM_VERSION,
-            modelPresent = modelFileLocator.isPresent(),
-            expectedModelPath = modelFileLocator.absolutePath,
+            modelPresent = modelFileLocator.isPresent(configFactory.selected()),
+            expectedModelPath = modelFileLocator.fileFor(configFactory.selected()).absolutePath,
         ),
     )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -64,16 +73,39 @@ class ChatViewModel @Inject constructor(
 
     /** Lazy engine load, triggered by entering the chat screen rather than by Application. */
     fun loadEngine() {
-        val present = modelFileLocator.isPresent()
-        _uiState.value = _uiState.value.copy(
-            modelPresent = present,
-            expectedModelPath = modelFileLocator.absolutePath,
-        )
-        if (!present) return
+        refreshModelState()
+        if (!_uiState.value.modelPresent) return
         if (_uiState.value.engineState is LocalRagState.Loading) return
 
         startLoadTimer()
         viewModelScope.launch { localRag.initialize() }
+    }
+
+    /** Switches models on the same engine: persist, retarget, reload. Nothing else moves. */
+    fun onModelSelected(option: ModelOption) {
+        if (option == _uiState.value.modelOption && _uiState.value.modelPresent) return
+        if (!modelFileLocator.isPresent(option)) return
+        Log.d(TAG, "switching model to ${option.displayName}")
+        selectionStore.select(option)
+        generationJob?.cancel()
+        generationJob = null
+        localRag.updateConfig(configFactory.create(option))
+        _uiState.value = _uiState.value.copy(isGenerating = false, activeActivity = null)
+        refreshModelState()
+        startLoadTimer()
+        viewModelScope.launch { localRag.initialize() }
+    }
+
+    private fun refreshModelState() {
+        val option = configFactory.selected()
+        _uiState.value = _uiState.value.copy(
+            modelOption = option,
+            availableModels = ModelOption.entries.filterTo(mutableSetOf()) {
+                modelFileLocator.isPresent(it)
+            },
+            modelPresent = modelFileLocator.isPresent(option),
+            expectedModelPath = modelFileLocator.fileFor(option).absolutePath,
+        )
     }
 
     private fun startLoadTimer() {

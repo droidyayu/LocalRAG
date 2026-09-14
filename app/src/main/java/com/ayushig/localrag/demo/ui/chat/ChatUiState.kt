@@ -3,10 +3,14 @@ package com.ayushig.localrag.demo.ui.chat
 import androidx.compose.runtime.Immutable
 import com.ayushig.localrag.android.LocalRagState
 import com.ayushig.localrag.demo.domain.model.ChatMessage
+import com.ayushig.localrag.demo.domain.model.ModelOption
 
 @Immutable
 data class ChatUiState(
     val engineState: LocalRagState = LocalRagState.Idle,
+    val modelOption: ModelOption = ModelOption.E2B,
+    /** Options with a file actually on device; empty when nothing was pushed. */
+    val availableModels: Set<ModelOption> = emptySet(),
     val modelPresent: Boolean = true,
     val expectedModelPath: String = "",
     val messages: List<ChatMessage> = emptyList(),

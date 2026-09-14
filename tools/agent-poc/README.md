@@ -11,6 +11,25 @@ python3 tools/agent-poc/agent_poc.py demo
 python3 tools/agent-poc/agent_poc.py replay --transcript /tmp/turn.txt
 ```
 
+Live turns against the real model need the project venv (created by you, lives here —
+`python3 -m venv tools/agent-poc/.venv`, then
+`tools/agent-poc/.venv/bin/pip install -r tools/agent-poc/requirements.txt`,
+currently just `litert-lm-api`, pinned to the Android side's version):
+
+```bash
+tools/agent-poc/.venv/bin/python tools/agent-poc/agent_poc.py live \
+  --question "what is my portfolio worth" \
+  --model /path/to/gemma-4-E2B-it.litertlm --demo-obs
+```
+
+`live` runs the full loop: portfolio observations from `--obs NAME=TEXT` (or
+`--demo-obs` for the worked-example figures), documentation from BM25 over the real
+corpus, history from repeatable `--hist ROLE:text`, prompt variants from `--prompt-file`.
+`litert_generate.py` mirrors the Android `Generator` (one engine, fresh conversation per
+call, greedy sampling). Desktop CPU runs a turn in seconds; the model echoes `OBSERVATION`
+blocks inside its own replies sometimes — harmless, the loop only ever reads the first
+line for directives.
+
 - `sizes`: BM25 over the real `app/src/main/docs`, then the round-0 prompt size
   plus per-round projections. A/B context levers with `--top-k`,
   `--max-obs-chars N`, and `--prompt-file variant.txt`.

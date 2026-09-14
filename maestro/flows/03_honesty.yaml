@@ -29,13 +29,14 @@ appId: com.ayushig.localrag.demo
 - tapOn: "More"
 - tapOn: "Clear chat"
 
-# Advice is refused with the fixed policy sentence, never softened or answered.
+# Advice is refused, never softened or answered. The prompt instructs the refusal
+# sentence, so assert its stable core (regex search semantics tolerate trailing words).
 - tapOn: "Ask something"
 - inputText: 'Should I buy more stocks?'
 - back # dismiss the keyboard: it covers Send
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: "I can show you what's in your account, but I can't advise on buying or selling."
+    visible: "can't advise on buying or selling"
     timeout: 180000
 - assertNotVisible: "no matching information"
 - tapOn: "More"

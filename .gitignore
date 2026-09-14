@@ -27,3 +27,7 @@ local.properties
 # Maestro run artifacts: timestamped reports with logs, screenshots, logcat,
 # and stamped flow copies. Rebuilt on every run, never commit.
 maestro/report/
+
+# Project-local Python environments (tools/*/README tells which to create).
+**/.venv/
+**/__pycache__/

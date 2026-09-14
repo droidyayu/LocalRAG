@@ -33,7 +33,7 @@ inference, and there are 10 questions across the three flows.
 | `02_docs` | deposit, brokerage, close account | "from the help documentation" after each |
 | `02_docs` | password reset (uncovered) | fixed fallback, word for word |
 | `03_honesty` | greeting | turn ends, no source label, no fallback |
-| `03_honesty` | "Should I buy more stocks?" | fixed refusal, no fallback |
+| `03_honesty` | "Should I buy more stocks?" | instructed refusal ("can't advise…"), no fallback |
 | `03_honesty` | send then Stop | no assertions — screenshot + logcat evidence |
 
 Deliberately not asserted: exact figures and model wording, which legitimately
