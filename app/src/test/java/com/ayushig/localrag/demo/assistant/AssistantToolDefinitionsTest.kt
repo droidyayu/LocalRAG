@@ -1,7 +1,5 @@
 package com.ayushig.localrag.demo.assistant
 
-import com.ayushig.localrag.android.MatchSource
-import com.ayushig.localrag.android.Passage
 import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
 import com.ayushig.localrag.demo.domain.model.portfolio.AssetCategory
 import com.ayushig.localrag.demo.domain.model.portfolio.CategorySummary
@@ -79,21 +77,9 @@ class AssistantToolDefinitionsTest {
         override suspend fun findHoldingBySymbol(query: String): HoldingSearchResult? = holding
     }
 
-    private val passage = Passage(
-        chunkId = "gtt-order-basics#what-it-does",
-        docId = "gtt-order-basics",
-        title = "What is a GTT order?",
-        heading = "What it does",
-        text = "A GTT order stays pending until your trigger price is reached.",
-        screenLink = "app://orders/gtt",
-        score = 4.2f,
-        source = MatchSource.BM25,
-    )
-
     private fun tools(
         repo: PortfolioRepository = FakeRepo(),
-        docs: suspend (String) -> List<Passage> = { emptyList() },
-    ) = AssistantToolDefinitions(repo, docs)
+    ) = AssistantToolDefinitions(repo)
 
     private suspend fun AssistantToolDefinitions.call(
         name: String,
@@ -154,33 +140,12 @@ class AssistantToolDefinitionsTest {
     }
 
     @Test
-    fun `documentation observation carries passages and titles`() = runTest {
-        val tools = tools(docs = { listOf(passage) })
-        val observation = tools.call("search_documentation", mapOf("query" to "gtt"))!!
-        assertTrue(observation.text.contains("What is a GTT order?"))
-        assertTrue(observation.text.contains("stays pending"))
-        assertEquals(
-            listOf("What is a GTT order? — What it does"),
-            observation.sourceTitles,
-        )
-    }
-
-    @Test
-    fun `documentation miss is an observation, empty query is a failure`() = runTest {
-        val tools = tools(docs = { emptyList() })
-        assertEquals(
-            "no passages found",
-            tools.call("search_documentation", mapOf("query" to "zzz"))!!.text,
-        )
-        assertNull(tools.call("search_documentation", emptyMap()))
-    }
-
-    @Test
     fun `unknown tool and failed reads yield null`() = runTest {
         val tools = tools()
         assertNull(tools.call("delete_portfolio", emptyMap()))
+        assertNull(tools.call("search_documentation", mapOf("query" to "gtt")))
 
         val failing = object : StubRepo() {}
-        assertNull(AssistantToolDefinitions(failing, { emptyList() }).call("get_portfolio_summary", emptyMap()))
+        assertNull(AssistantToolDefinitions(failing).call("get_portfolio_summary", emptyMap()))
     }
 }

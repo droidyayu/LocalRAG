@@ -40,6 +40,13 @@ data class AgentConfig(
      * and bounds the worst case no matter how long the chat gets.
      */
     val maxHistoryChars: Int = 1500,
+    /**
+     * Documentation passages the host pre-searched for this question, highest score
+     * first. Pasted into the transcript above the question and counted as grounding
+     * evidence exactly like tool observations: they are fresh retrieval output, not
+     * memory. The host caps count and characters; an empty list asks nothing.
+     */
+    val documentation: List<Passage> = emptyList(),
 )
 
 /**

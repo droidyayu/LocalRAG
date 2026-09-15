@@ -172,7 +172,7 @@ def gate_check(answer, passages, minimum_overlap=0.5, max_chars=1200):
 # Copy of AGENT_SYSTEM_PROMPT (keep in sync with AgentPrompts.kt). Override
 # with --prompt-file to A/B variants and watch the size line move.
 
-SYSTEM_PROMPT = """You are the in-app help assistant. Answer using only tool observations. Reply with exactly one line per turn: a TOOL call or an ANSWER.
+SYSTEM_PROMPT = """You are the in-app help assistant. Answer using only tool observations and the pre-searched documentation passages. Reply with exactly one line per turn: a TOOL call or an ANSWER.
 
 TOOL lines look like: TOOL: tool_name | key=value; key=value
 ANSWER lines look like: ANSWER: <one or two sentences>
@@ -182,9 +182,10 @@ Tools:
 - get_category_summary | category=METALS, STOCKS, WEALTH or LEVERAGED
 - get_margin_status | (no arguments) : margin used, free margin, margin level
 - find_holding | query=<name or symbol> : one holding's figures
-- search_documentation | query=<question> : help passages; cite nothing beyond them
 
-Rules: never write a number that is not in the observations. Copy every figure character-for-character exactly as shown, cents and commas included ($12,340.00, never $12,340) — a rounded figure is a different figure. For how, what, or why questions about the app, call search_documentation first and answer only from its passages; never answer such questions from general knowledge. Questions naming a finance topic — fees, brokerage, charges, KYC, deposits, orders — are documentation questions even when asked as "what is X". Never say you lack information without calling search_documentation first. Never write OBSERVATION lines yourself; observations only arrive from tool results. Use only words from the observations; do not explain or add background. The ANSWER: line is the entire reply, with nothing written before it. If asked whether to buy, sell, or hold something, reply with ANSWER: I can't advise on buying or selling. Questions about fees, charges, costs, or prices are documentation questions, not advice: search first, never refuse them. Never advise buying, selling or holding. For greetings or questions with no relevant tool result, still answer with ANSWER: saying briefly what you can help with. For every new question, call the tool again for fresh figures even if earlier turns already show them; earlier turns are context, never a source of figures.
+Documentation passages pre-searched for this question appear above the question; use them if they answer it, ignore them otherwise.
+
+Rules: never write a number that is not in the observations or passages. Copy every figure character-for-character exactly as shown, cents and commas included ($12,340.00, never $12,340) — a rounded figure is a different figure. How, what, or why questions about the app are documentation questions: reply ANSWER directly from the passages with no tool call. Never answer such questions from general knowledge, and never say you lack information when the passages answer the question. Never write OBSERVATION lines yourself; observations only arrive from tool results. Use only words from the observations; do not explain or add background. The ANSWER: line is the entire reply, with nothing written before it. If asked whether to buy, sell, or hold something, reply with ANSWER: I can't advise on buying or selling. Questions about fees, charges, costs, or prices are documentation questions, not advice: answer them from the passages, never refuse them. For greetings or questions with no relevant tool result, still answer with ANSWER: saying briefly what you can help with. For every new question, call the tool again for fresh figures even if earlier turns already show them; earlier turns are context, never a source of figures.
 
 Example turn:
 Question: what is my portfolio worth
@@ -194,11 +195,10 @@ total value: $12,340.00
 ANSWER: Your portfolio is worth $12,340.00.
 
 Example turn:
-Question: how do I deposit funds
-TOOL: search_documentation | query=how do I deposit funds
-OBSERVATION [search_documentation]:
+Documentation pre-searched for this question (use it if it answers the question, ignore it otherwise):
 How do I add funds? — overview
 Transfer from a bank account held in your own name. Funds usually arrive within one working day.
+Question: how do I deposit funds
 ANSWER: Transfer from a bank account held in your own name. Funds usually arrive within one working day."""
 
 # Demo observation: the worked example's figures.
@@ -210,7 +210,7 @@ currency: USD"""
 
 TOOL_NAMES = {
     "get_portfolio_summary", "get_category_summary", "get_margin_status",
-    "find_holding", "search_documentation",
+    "find_holding",
 }
 
 
@@ -226,6 +226,13 @@ def load_corpus():
         for para in path.read_text().split("\n\n"):
             para = para.strip()
             if not para:
+                continue
+            if para.startswith("---"):
+                # Front-matter block, not content: the device chunker strips it,
+                # and its alias terms would otherwise outrank real passages.
+                for line in para.splitlines():
+                    if line.startswith("title:"):
+                        title = line.split(":", 1)[1].strip()
                 continue
             if para.startswith("# ") and first_h1 is None:
                 first_h1 = para[2:].strip()
@@ -307,15 +314,25 @@ def history_block(history, max_chars=1500):
     return "\n".join(lines) + "\n"
 
 
+DOC_HEADER = ("Documentation pre-searched for this question "
+              "(use it if it answers the question, ignore it otherwise):")
+
+
 def run_turn(question, replies, observations, system, history=(), max_rounds=3,
-             max_obs_chars=None, generate=None, execute=None, echo=False):
+             max_obs_chars=None, generate=None, execute=None, echo=False,
+             documentation=()):
     """replies: list of raw model outputs consumed in order (ignored when
     generate is set). observations: dict tool name -> text (missing = failed),
     unless execute(name, args) is given. history: list of (role, text).
+    documentation: list of pre-rendered "title\\ntext" passage blocks, pasted
+    above the question and counted as evidence like the SDK does.
     Returns the outcome string; prints sizes + verdicts along the way."""
     # Mirrors the runner: system seeded once, so every round re-reads it.
     transcript = system + history_block(history)
-    seen_obs = []
+    if documentation:
+        transcript += DOC_HEADER + "\n" + "\n---\n".join(documentation) + "\n"
+    seen_obs = [block.split("\n", 1)[1] if "\n" in block else block
+                for block in documentation]
     it = iter(replies or [])
 
     def gen(prompt_text, label):
@@ -522,16 +539,17 @@ def cmd_live(args):
         history.append((role.strip(), text.strip()))
 
     def execute(name, tool_args):
-        if name == "search_documentation":
-            query = tool_args.get("query", "").strip()
-            if not query:
-                return None
-            hits = bm25_search(query, chunks, top_k=args.top_k)
-            if not hits:
-                return "no passages found"
-            return "\n---\n".join(
-                f"{c['title']} — overview\n{c['text']}" for c in hits)
         return static_obs.get(name)
+
+    # Mirrors the app: documentation is pre-searched before the turn (top 2
+    # within budget) rather than fetched by a tool call.
+    documentation = []
+    if not args.no_doc_context:
+        for hit in bm25_search(args.question, chunks, top_k=2)[:2]:
+            block = f"{hit['title']} — overview\n{hit['text']}"
+            if documentation and sum(len(b) for b in documentation) + len(block) > 1200:
+                break
+            documentation.append(block)
 
     cache_dir = args.cache_dir or os.path.join(tempfile.gettempdir(), "litert-cache")
     generator = LiteRtGenerator(args.model, system, max_output_tokens=256,
@@ -540,7 +558,7 @@ def cmd_live(args):
         outcome = run_turn(args.question, [], {}, system, history,
                            max_obs_chars=args.max_obs_chars,
                            generate=generator.generate, execute=execute,
-                           echo=True)
+                           echo=True, documentation=documentation)
     finally:
         generator.close()
     print(f"outcome: {outcome}")
@@ -600,6 +618,8 @@ def main(argv=None):
     lv.add_argument("--hist", action="append", metavar="ROLE:text",
                     help="history turn, ROLE is user or model (repeatable)")
     lv.add_argument("--top-k", type=int, default=4)
+    lv.add_argument("--no-doc-context", action="store_true",
+                    help="ask with no pre-searched passages (A/B control)")
     lv.add_argument("--cache-dir", default=None,
                     help="engine cache dir (defaults to system tmp, never the repo)")
     lv.set_defaults(fn=cmd_live)

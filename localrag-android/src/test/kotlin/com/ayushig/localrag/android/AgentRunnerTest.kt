@@ -264,6 +264,33 @@ class AgentRunnerTest {
     }
 
     @Test
+    fun `pre-searched passages ground the answer with no tool call`() = runTest {
+        val passage = Passage(
+            chunkId = "deposit-funds#1",
+            docId = "deposit-funds",
+            title = "How do I add funds?",
+            heading = "overview",
+            text = "Transfer from a bank account held in your own name. " +
+                "Funds usually arrive within one working day.",
+            screenLink = null,
+            score = 13.8f,
+            source = MatchSource.BM25,
+        )
+        val answer = AgentRunner().answer(
+            generate = scripted(
+                "ANSWER: Transfer from a bank account held in your own name. " +
+                    "Funds usually arrive within one working day.",
+            ),
+            query = "how do I deposit funds",
+            config = config(emptyMap()).copy(documentation = listOf(passage)),
+        ) as AgentOutcome.Final
+        // Single round: no tool was planned, none ran, the passages did the grounding.
+        assertEquals(1, answer.timings.rounds)
+        assertTrue(answer.usedTools.isEmpty())
+        assertEquals(listOf("How do I add funds? — overview"), answer.sources)
+    }
+
+    @Test
     fun `a repeated tool call forces the answer instead of looping`() = runTest {
         var executions = 0
         val answer = AgentRunner().answer(

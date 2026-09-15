@@ -1,6 +1,5 @@
 package com.ayushig.localrag.demo.data.assistant
 
-import com.ayushig.localrag.android.Passage
 import com.ayushig.localrag.android.ToolDefinition
 import com.ayushig.localrag.android.ToolResult
 import com.ayushig.localrag.demo.core.Formatters
@@ -18,7 +17,6 @@ import com.ayushig.localrag.demo.domain.repository.PortfolioRepository
  */
 class AssistantToolDefinitions constructor(
     private val repository: PortfolioRepository,
-    private val docsSearch: suspend (String) -> List<Passage>,
 ) {
 
     fun list(): List<ToolDefinition> = listOf(
@@ -45,12 +43,6 @@ class AssistantToolDefinitions constructor(
             description = "One holding's figures by name or symbol.",
             argSpec = "query=<name or symbol>",
             execute = { args -> holding(args) },
-        ),
-        ToolDefinition(
-            name = SEARCH_DOCUMENTATION,
-            description = "Help passages for how-things-work questions; cite nothing beyond them.",
-            argSpec = "query=<question>",
-            execute = { args -> documentation(args) },
         ),
     )
 
@@ -107,22 +99,6 @@ class AssistantToolDefinitions constructor(
             text = "no holding matches \"$query\"",
         )
         ToolResult(tool = FIND_HOLDING, text = describe(match))
-    }.getOrNull()
-
-    private suspend fun documentation(args: Map<String, String>): ToolResult? = runCatching {
-        val query = args["query"]?.trim().orEmpty()
-        if (query.isEmpty()) return null
-        val passages = docsSearch(query)
-        if (passages.isEmpty()) return ToolResult(tool = SEARCH_DOCUMENTATION, text = "no passages found")
-        ToolResult(
-            tool = SEARCH_DOCUMENTATION,
-            text = passages.joinToString("\n---\n") { passage ->
-                "${passage.title} — ${passage.heading ?: "overview"}\n${passage.text}"
-            },
-            sourceTitles = passages.map { passage ->
-                listOfNotNull(passage.title, passage.heading).joinToString(" — ")
-            },
-        )
     }.getOrNull()
 
     private fun describe(match: HoldingSearchResult): String = when (match) {
@@ -207,6 +183,5 @@ class AssistantToolDefinitions constructor(
         const val CATEGORY_SUMMARY = "get_category_summary"
         const val MARGIN_STATUS = "get_margin_status"
         const val FIND_HOLDING = "find_holding"
-        const val SEARCH_DOCUMENTATION = "search_documentation"
     }
 }

@@ -15,10 +15,11 @@ import com.ayushig.localrag.android.AgentRole
 import com.ayushig.localrag.android.AgentTimings
 import com.ayushig.localrag.android.LocalRag
 import com.ayushig.localrag.android.LocalRagState
+import com.ayushig.localrag.android.Passage
 import com.ayushig.localrag.demo.data.LocalRagConfigFactory
 import com.ayushig.localrag.demo.data.ModelFileLocator
 import com.ayushig.localrag.demo.data.ModelSelectionStore
-import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
+import com.ayushig.localrag.demo.data.assistant.DocumentationContext
 import com.ayushig.localrag.demo.domain.assistant.NoInformationFallback
 import com.ayushig.localrag.demo.domain.model.ModelOption
 import com.ayushig.localrag.demo.domain.model.TurnTimings
@@ -40,6 +41,7 @@ class ChatViewModel @Inject constructor(
     private val selectionStore: ModelSelectionStore,
     private val configFactory: LocalRagConfigFactory,
     private val agentConfig: AgentConfig,
+    private val documentationContext: DocumentationContext,
     private val localRag: LocalRag,
 ) : ViewModel() {
 
@@ -165,7 +167,10 @@ class ChatViewModel @Inject constructor(
 
         generationJob = viewModelScope.launch {
             if (modelCanGenerate()) {
-                answerWithAgent(prompt, replyId, history)
+                // Documentation rides along pre-searched: milliseconds of retrieval
+                // replace a whole tool round, and the model can no longer skip it.
+                val documentation = documentationContext.forQuery(prompt)
+                answerWithAgent(prompt, replyId, history, documentation)
             } else {
                 // No engine, no answers: the rules tier is gone, so say exactly that.
                 answerNoInformation(replyId)
@@ -185,18 +190,21 @@ class ChatViewModel @Inject constructor(
         prompt: String,
         replyId: String,
         history: List<AgentMessage>,
+        documentation: List<Passage>,
     ) {
         Log.d(TAG, "send \"$prompt\" via agent")
         // The calls accumulate here as the turn runs, so the placeholder bubble can show them
         // live and the finished message keeps them for its expandable details.
         val records = mutableListOf<ToolCallRecord>()
         val onEvent: (AgentEvent) -> Unit = { event -> handleAgentEvent(replyId, event, records) }
-        when (val answer = localRag.runAgent(prompt, agentConfig, history, onEvent)) {
+        val config = agentConfig.copy(documentation = documentation)
+        when (val answer = localRag.runAgent(prompt, config, history, onEvent)) {
             is AgentOutcome.Final -> {
+                // Tools first: injected passages ride along every turn, so their
+                // presence alone proves nothing — executed tools do.
                 val source = when {
+                    answer.usedTools.isNotEmpty() -> MessageSource.PORTFOLIO_DATA
                     answer.sources.isNotEmpty() -> MessageSource.DOCUMENTATION
-                    answer.usedTools.any { it != AssistantToolDefinitions.SEARCH_DOCUMENTATION } ->
-                        MessageSource.PORTFOLIO_DATA
                     else -> MessageSource.MODEL
                 }
                 updateMessage(replyId) {

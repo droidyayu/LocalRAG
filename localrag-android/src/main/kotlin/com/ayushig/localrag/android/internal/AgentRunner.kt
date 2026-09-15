@@ -7,6 +7,7 @@ import com.ayushig.localrag.android.AgentMessage
 import com.ayushig.localrag.android.AgentOutcome
 import com.ayushig.localrag.android.AgentRole
 import com.ayushig.localrag.android.AgentTimings
+import com.ayushig.localrag.android.Passage
 import com.ayushig.localrag.core.answer.OutputGate
 
 /**
@@ -34,6 +35,16 @@ internal class AgentRunner {
         val observations = mutableListOf<String>()
         val sources = mutableListOf<String>()
         val usedTools = mutableListOf<String>()
+        // Pre-searched documentation rides along like an observation that cost no round:
+        // pasted once above the question, counted as evidence, sourced by title. The host
+        // decides what qualifies; the loop treats it exactly like a tool result.
+        if (config.documentation.isNotEmpty()) {
+            transcript.append(documentationBlock(config.documentation))
+            observations += config.documentation.map { it.text }
+            sources += config.documentation.map { passage ->
+                listOfNotNull(passage.title, passage.heading).joinToString(" — ")
+            }
+        }
         var lastCall: Pair<String, Map<String, String>>? = null
 
         // Wall-clock accounting for the turn, reported on every outcome so the host can
@@ -221,6 +232,20 @@ internal class AgentRunner {
             (if (message.role == AgentRole.USER) "User: " else "Assistant: ") + message.text.trim()
         }
     }
+
+    /**
+     * The pre-searched block, in the same title-text shape the documentation tool used
+     * to paste, so tuned behavior carries over: the model has seen this exact layout.
+     */
+    private fun documentationBlock(passages: List<Passage>): String =
+        passages.joinToString(
+            separator = "\n---\n",
+            prefix = "Documentation pre-searched for this question " +
+                "(use it if it answers the question, ignore it otherwise):\n",
+            postfix = "\n",
+        ) { passage ->
+            "${passage.title} — ${passage.heading ?: "overview"}\n${passage.text}"
+        }
 
     private fun StringBuilder.observe(
         call: AgentProtocol.Parsed.ToolCall,

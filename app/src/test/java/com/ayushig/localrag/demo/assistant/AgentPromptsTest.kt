@@ -19,4 +19,9 @@ class AgentPromptsTest {
             ),
         )
     }
+
+    @Test
+    fun `prompt never names the removed documentation tool`() {
+        assertTrue(!AGENT_SYSTEM_PROMPT.contains("search_documentation"))
+    }
 }

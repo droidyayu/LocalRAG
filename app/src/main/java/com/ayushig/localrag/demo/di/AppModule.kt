@@ -4,6 +4,7 @@ import com.ayushig.localrag.android.AgentConfig
 import com.ayushig.localrag.android.LocalRag
 import com.ayushig.localrag.demo.data.assistant.AGENT_SYSTEM_PROMPT
 import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
+import com.ayushig.localrag.demo.data.assistant.DocumentationContext
 import com.ayushig.localrag.demo.data.repository.FakePortfolioRepository
 import com.ayushig.localrag.demo.domain.repository.PortfolioRepository
 import dagger.Module
@@ -22,16 +23,24 @@ object AppModule {
     fun bindPortfolioRepository(impl: FakePortfolioRepository): PortfolioRepository = impl
 
     /**
-     * The agent's tools, built by hand: the tool executors take a suspend function Hilt cannot
-     * provide as a binding, so Dagger builds the whole object and only sees concrete types.
+     * The agent's tools, built by hand: Dagger only sees the concrete repository and the
+     * finished object. Documentation is pre-searched per question rather than a tool call,
+     * so the tools below are portfolio functions only.
      */
     @Provides
     @Singleton
     fun provideAssistantToolDefinitions(
         repository: PortfolioRepository,
-        localRag: LocalRag,
-    ): AssistantToolDefinitions =
-        AssistantToolDefinitions(repository) { query -> localRag.retrieveOnly(query) }
+    ): AssistantToolDefinitions = AssistantToolDefinitions(repository)
+
+    /**
+     * Pre-searched documentation for each question, built by hand for the same reason:
+     * the search function is not something Dagger can provide as a binding.
+     */
+    @Provides
+    @Singleton
+    fun provideDocumentationContext(localRag: LocalRag): DocumentationContext =
+        DocumentationContext { query -> localRag.retrieveOnly(query) }
 
     /**
      * Everything the SDK agent loop needs from the host app: prompt copy plus the tools above.
