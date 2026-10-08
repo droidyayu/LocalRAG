@@ -4,6 +4,10 @@ The Gradle plugin shells out to a script here to turn documentation chunks into 
 out rather than embedding in the Gradle JVM keeps the model runtime out of the build classpath, at
 the cost of a toolchain requirement on every machine that builds with embedding enabled.
 
+> There is also a Python-free sidecar: `tools/skainet-embed/skainet_embed.sh` runs a Kotlin
+> Multiplatform embedder (`localrag-embedder-skainet`, built on SKaiNET) that
+> speaks this same protocol and whose exact code also compiles for iOS. See that module's README.
+
 ## Protocol
 
 One JSON object per line on stdin, one JSON array of floats per line on stdout, same order:

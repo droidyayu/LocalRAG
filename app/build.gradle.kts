@@ -22,11 +22,24 @@ localRag {
     embedding {
         // Off by default: a vector-less bundle is a supported runtime state, and turning this on
         // needs the sidecar toolchain described in tools/embed/README.md.
-        // Flip with -PlocalRagEmbed=true to exercise the embedding path.
+        // Flip with -PlocalRagEmbed=true to exercise the embedding path, or
+        // -PlocalRagEmbedSkainet=true to embed through the SKaiNET Kotlin sidecar
+        // (localrag-embedder-skainet) — no Python toolchain involved.
         val embed = providers.gradleProperty("localRagEmbed").orNull == "true"
-        enabled.set(embed)
+        val embedSkainet = providers.gradleProperty("localRagEmbedSkainet").orNull == "true"
+        enabled.set(embed || embedSkainet)
         dimensions.set(256)
-        sidecarScript.set(rootProject.layout.projectDirectory.file("tools/embed/hash_embed.py"))
+        if (embedSkainet) {
+            modelId.set("skainet-hrp-v1")
+            sidecarExecutable.set("sh")
+            sidecarScript.set(rootProject.layout.projectDirectory.file("tools/skainet-embed/skainet_embed.sh"))
+            // The hashed-projection embedder derives nothing from task prefixes; empty prefixes
+            // keep the manifest parity contract honest for the runtime side.
+            queryPrefix.set("")
+            documentPrefix.set("")
+        } else {
+            sidecarScript.set(rootProject.layout.projectDirectory.file("tools/embed/hash_embed.py"))
+        }
         sidecarArguments.set(listOf("--dimensions", "256"))
     }
 }
