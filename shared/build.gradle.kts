@@ -21,6 +21,8 @@ kotlin {
         target.binaries.framework {
             baseName = "Shared"
             isStatic = true
+            // Swift implements the SDK engine interfaces, so they must be visible in the framework.
+            export(project(":localrag"))
         }
     }
 
