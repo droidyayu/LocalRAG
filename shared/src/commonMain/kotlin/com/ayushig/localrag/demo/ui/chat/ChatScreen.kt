@@ -43,11 +43,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ayushig.localrag.demo.resources.Res
+import com.ayushig.localrag.demo.resources.ic_more_vert
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import com.ayushig.localrag.LocalRagState
 import com.ayushig.localrag.demo.domain.model.ChatMessage
@@ -497,7 +499,7 @@ private fun OverflowMenu(
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_more),
+                painter = painterResource(Res.drawable.ic_more_vert),
                 contentDescription = "More",
             )
         }

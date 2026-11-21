@@ -2,8 +2,8 @@ package com.ayushig.localrag.demo.ui.chat
 
 import com.ayushig.localrag.AgentEvent
 import com.ayushig.localrag.demo.domain.model.TurnTimings
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 /** The status line under the running bubble says what the turn is doing, in plain words. */
 class AgentActivityTextTest {
@@ -74,7 +74,7 @@ class AgentActivityTextTest {
     }
 
     @Test
-    fun `turn breakdown names model time, function time, and steps`() {
+    fun `turn breakdown names model time and function time and steps`() {
         assertEquals(
             "Model 11.8s · Functions 4ms · 2 steps",
             formatTurnBreakdown(

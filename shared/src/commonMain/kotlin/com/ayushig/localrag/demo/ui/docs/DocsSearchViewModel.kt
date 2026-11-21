@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.time.TimeSource
 
 @Immutable
 data class DocsSearchUiState(
@@ -49,13 +50,13 @@ class DocsSearchViewModel(
         searchJob?.cancel()
         _uiState.value = _uiState.value.copy(searching = true)
         searchJob = viewModelScope.launch {
-            val start = System.currentTimeMillis()
+            val start = TimeSource.Monotonic.markNow()
             val passages = localRag.retrieveOnly(query)
             _uiState.value = _uiState.value.copy(
                 passages = passages,
                 searching = false,
                 searched = true,
-                lastQueryMs = System.currentTimeMillis() - start,
+                lastQueryMs = (TimeSource.Monotonic.markNow() - start).inWholeMilliseconds,
             )
         }
     }

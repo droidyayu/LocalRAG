@@ -140,7 +140,7 @@ private fun PassageCard(rank: Int, passage: Passage) {
                 modifier = Modifier.padding(top = 6.dp),
             )
             Text(
-                text = "#%d  %s  score %.2f".format(rank, passage.chunkId, passage.score),
+                text = "#$rank  ${passage.chunkId}  score ${formatScore(passage.score)}",
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -148,6 +148,15 @@ private fun PassageCard(rank: Int, passage: Passage) {
             )
         }
     }
+}
+
+/**
+ * Common replacement for `"%.2f".format(score)`: two fraction digits, half-up, no grouping.
+ */
+private fun formatScore(score: Float): String {
+    val sign = if (score < 0 || (score == 0f && 1 / score < 0)) "-" else ""
+    val scaled = kotlin.math.round(kotlin.math.abs(score.toDouble()) * 100).toLong()
+    return "$sign${scaled / 100}.${(scaled % 100).toString().padStart(2, '0')}"
 }
 
 private fun engineLine(state: LocalRagState): String = when (state) {
