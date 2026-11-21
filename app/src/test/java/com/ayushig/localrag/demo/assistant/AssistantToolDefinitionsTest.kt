@@ -84,7 +84,7 @@ class AssistantToolDefinitionsTest {
     private suspend fun AssistantToolDefinitions.call(
         name: String,
         args: Map<String, String>,
-    ) = list().single { it.name == name }.execute(args)
+    ) = list().firstOrNull { it.name == name }?.execute(args)
 
     @Test
     fun `summary observation carries figures and labels`() = runTest {
