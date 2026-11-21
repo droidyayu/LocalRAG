@@ -1,6 +1,7 @@
 package com.ayushig.localrag.internal
 
-import android.util.Log
+import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 import com.ayushig.localrag.AgentConfig
 import com.ayushig.localrag.AgentEvent
 import com.ayushig.localrag.AgentMessage
@@ -47,9 +48,8 @@ internal class AgentRunner {
         }
         var lastCall: Pair<String, Map<String, String>>? = null
 
-        // Wall-clock accounting for the turn, reported on every outcome so the host can
-        // show where the time went. currentTimeMillis, not elapsedRealtime: this also runs
-        // on the JVM under unit tests, where the Android clock is a stub that throws.
+        // Elapsed-time accounting for the turn, reported on every outcome so the host can
+        // show where the time went. Monotonic, not wall clock: only differences are reported.
         val started = now()
         var generateMs = 0L
         var toolMs = 0L
@@ -66,11 +66,11 @@ internal class AgentRunner {
             return raw to took
         }
 
-        Log.d(TAG, "turn start: \"$query\"")
+        PlatformLog.log(LogLevel.DEBUG, TAG, "turn start: \"$query\"")
         for (round in 0 until config.maxToolRounds) {
             onEvent(AgentEvent.Thinking)
             val (raw, took) = callModel(transcript.prompt(query))
-            Log.d(TAG, "round $round model said (${took}ms): ${raw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
+            PlatformLog.log(LogLevel.DEBUG, TAG, "round $round model said (${took}ms): ${raw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
             val parsed = AgentProtocol.parse(raw, allowedTools.keys)
             if (parsed == null) {
                 // Plain prose with no observations is a greeting, not a plan: judge it as
@@ -82,10 +82,10 @@ internal class AgentRunner {
                     AgentProtocol.containsDirective(prose) ||
                     !isConversationalShape(prose, config)
                 ) {
-                    Log.w(TAG, "round $round: off-grammar output, ending unresolved")
+                    PlatformLog.log(LogLevel.WARN, TAG, "round $round: off-grammar output, ending unresolved")
                     return AgentOutcome.Unresolved(snapshot())
                 }
-                Log.d(TAG, "round $round: plain prose accepted as conversational")
+                PlatformLog.log(LogLevel.DEBUG, TAG, "round $round: plain prose accepted as conversational")
                 onEvent(AgentEvent.JudgingAnswer)
                 return judge(prose, query, observations, sources, usedTools, config, snapshot())
             }
@@ -96,7 +96,7 @@ internal class AgentRunner {
                         // The model is re-asking for what it already has: the observation is
                         // in the transcript, so another round trip only burns a full prefill
                         // (tens of seconds on CPU) to learn nothing. Answer from it now.
-                        Log.w(TAG, "round $round: repeating tool ${parsed.name}, forcing the answer")
+                        PlatformLog.log(LogLevel.WARN, TAG, "round $round: repeating tool ${parsed.name}, forcing the answer")
                         break
                     }
                     lastCall = call
@@ -107,10 +107,10 @@ internal class AgentRunner {
                     val toolTook = now() - toolCall
                     toolMs += toolTook
                     if (observation == null) {
-                        Log.w(TAG, "round $round: tool ${parsed.name} failed, ending unresolved")
+                        PlatformLog.log(LogLevel.WARN, TAG, "round $round: tool ${parsed.name} failed, ending unresolved")
                         return AgentOutcome.Unresolved(snapshot())
                     }
-                    Log.d(TAG, "round $round: tool ${parsed.name} ok (${observation.text.length} chars, ${toolTook}ms)")
+                    PlatformLog.log(LogLevel.DEBUG, TAG, "round $round: tool ${parsed.name} ok (${observation.text.length} chars, ${toolTook}ms)")
                     onEvent(
                         AgentEvent.ToolFinished(
                             parsed.name,
@@ -126,7 +126,7 @@ internal class AgentRunner {
 
                 is AgentProtocol.Parsed.FinalAnswer -> {
                     if (AgentProtocol.containsDirective(parsed.text)) {
-                        Log.w(TAG, "round $round: answer smuggles a directive, ending unresolved")
+                        PlatformLog.log(LogLevel.WARN, TAG, "round $round: answer smuggles a directive, ending unresolved")
                         return AgentOutcome.Unresolved(snapshot())
                     }
                     onEvent(AgentEvent.JudgingAnswer)
@@ -137,12 +137,12 @@ internal class AgentRunner {
 
         onEvent(AgentEvent.Thinking)
         val (forcedRaw, forcedTook) = callModel(transcript.forceAnswer(query))
-        Log.d(TAG, "forced answer model said (${forcedTook}ms): ${forcedRaw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
+        PlatformLog.log(LogLevel.DEBUG, TAG, "forced answer model said (${forcedTook}ms): ${forcedRaw?.lineSequence()?.firstOrNull().orEmpty().take(160)}")
         val forced = AgentProtocol.parse(forcedRaw, allowedTools.keys)
         if (forced !is AgentProtocol.Parsed.FinalAnswer ||
             AgentProtocol.containsDirective(forced.text)
         ) {
-            Log.w(TAG, "forced answer off-grammar, ending unresolved")
+            PlatformLog.log(LogLevel.WARN, TAG, "forced answer off-grammar, ending unresolved")
             return AgentOutcome.Unresolved(snapshot())
         }
         onEvent(AgentEvent.JudgingAnswer)
@@ -165,20 +165,20 @@ internal class AgentRunner {
     ): AgentOutcome {
         val answer = text.trim()
         if (answer.isEmpty()) {
-            Log.w(TAG, "judge: empty answer, unresolved")
+            PlatformLog.log(LogLevel.WARN, TAG, "judge: empty answer, unresolved")
             return AgentOutcome.Unresolved(timings)
         }
         val evidence = observations + query.filterNot(Char::isDigit)
         return when (val verdict = OutputGate.check(answer, evidence)) {
             OutputGate.Verdict.Allowed -> {
-                Log.d(TAG, "judge: allowed (${answer.length} chars, ${observations.size} observations)")
+                PlatformLog.log(LogLevel.DEBUG, TAG, "judge: allowed (${answer.length} chars, ${observations.size} observations)")
                 AgentOutcome.Final(answer, sources.distinct(), usedTools.distinct(), timings)
             }
 
             is OutputGate.Verdict.Rejected ->
                 when {
                     verdict.reason == OutputGate.Reason.ADVISORY_LANGUAGE -> {
-                        Log.w(TAG, "judge: refused (${verdict.detail})")
+                        PlatformLog.log(LogLevel.WARN, TAG, "judge: refused (${verdict.detail})")
                         AgentOutcome.Refused(timings)
                     }
 
@@ -186,12 +186,12 @@ internal class AgentRunner {
                     // well-formed greeting or signpost is safe. Advisory language still
                     // refuses above; anything else here is bounded small talk.
                     observations.isEmpty() && isConversationalShape(answer, config) -> {
-                        Log.d(TAG, "judge: conversational shape allowed")
+                        PlatformLog.log(LogLevel.DEBUG, TAG, "judge: conversational shape allowed")
                         AgentOutcome.Final(answer, emptyList(), emptyList(), timings)
                     }
 
                     else -> {
-                        Log.w(TAG, "judge: unresolved (${verdict.reason}: ${verdict.detail})")
+                        PlatformLog.log(LogLevel.WARN, TAG, "judge: unresolved (${verdict.reason}: ${verdict.detail})")
                         AgentOutcome.Unresolved(timings)
                     }
                 }
@@ -261,8 +261,15 @@ internal class AgentRunner {
     private companion object {
         const val TAG = "LocalRagAgent"
 
-        /** Wall clock in ms. currentTimeMillis, not the Android clock: see the note in answer(). */
-        fun now(): Long = System.currentTimeMillis()
+        /**
+         * Elapsed ms since process start. A monotonic clock, not wall time: only differences
+         * ever reach the timings, and those stay correct across sleep and clock changes.
+         */
+        @OptIn(ExperimentalTime::class)
+        private val startMark = TimeSource.Monotonic.markNow()
+
+        @OptIn(ExperimentalTime::class)
+        fun now(): Long = (TimeSource.Monotonic.markNow() - startMark).inWholeMilliseconds
 
         const val FORCE_ANSWER_SUFFIX =
             "No more tool calls. Reply now with one ANSWER: line using only the observations above.\n"

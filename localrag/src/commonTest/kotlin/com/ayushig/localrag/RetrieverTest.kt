@@ -8,9 +8,9 @@ import com.ayushig.localrag.core.bundle.StoredChunk
 import com.ayushig.localrag.core.document.Chunk
 import com.ayushig.localrag.core.index.Bm25Index
 import com.ayushig.localrag.core.index.VectorIndex
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 /**
  * Plain JVM tests: the retriever needs no Android context, which is the point of keeping the
@@ -145,7 +145,7 @@ class RetrieverTest {
     }
 
     @Test
-    fun `passages carry the display text, not the embedded text`() {
+    fun `passages carry the display text and not the embedded text`() {
         val passage = retriever().retrieve("standing order", 1, null, emptySet()).single()
         assertEquals("A GTT order stays pending.", passage.text)
         assertEquals("What it does", passage.heading)

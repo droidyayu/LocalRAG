@@ -2,9 +2,9 @@ package com.ayushig.localrag
 
 import com.ayushig.localrag.internal.AgentRunner
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 /**
  * The loop with a scripted model and stubbed tools.
@@ -116,7 +116,7 @@ class AgentRunnerTest {
     }
 
     @Test
-    fun `off-grammar output ends the turn unresolved`() = runTest {
+    fun `off grammar output ends the turn unresolved`() = runTest {
         val answer = AgentRunner().answer(
             generate = scripted("Let me think about that tomorrow"),
             query = "what is my portfolio worth",
@@ -188,7 +188,7 @@ class AgentRunnerTest {
     }
 
     @Test
-    fun `follow-up resolves with history in context`() = runTest {
+    fun `follow up resolves with history in context`() = runTest {
         val history = listOf(
             AgentMessage(AgentRole.USER, "what is my portfolio worth"),
             AgentMessage(AgentRole.MODEL, "Your portfolio is worth $12,340.00."),
@@ -269,7 +269,7 @@ class AgentRunnerTest {
     }
 
     @Test
-    fun `pre-searched passages ground the answer with no tool call`() = runTest {
+    fun `pre searched passages ground the answer with no tool call`() = runTest {
         val passage = Passage(
             chunkId = "deposit-funds#1",
             docId = "deposit-funds",

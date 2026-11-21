@@ -3,9 +3,9 @@ package com.ayushig.localrag
 import com.ayushig.localrag.internal.AgentProtocol
 import com.ayushig.localrag.internal.AgentProtocol.Parsed.FinalAnswer
 import com.ayushig.localrag.internal.AgentProtocol.Parsed.ToolCall
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.Test
 
 /**
  * The strict grammar between the loop and the model.
@@ -43,7 +43,7 @@ class AgentProtocolTest {
     }
 
     @Test
-    fun `prefixes and names match case-insensitively, values keep case`() {
+    fun `prefixes and names match case insensitively and values keep case`() {
         assertEquals(
             ToolCall("get_portfolio_summary", emptyMap()),
             AgentProtocol.parse("Tool: get_portfolio_summary", tools),
@@ -70,7 +70,7 @@ class AgentProtocolTest {
     }
 
     @Test
-    fun `non-grammar output is rejected`() {
+    fun `non grammar output is rejected`() {
         assertNull(AgentProtocol.parse(null, tools))
         assertNull(AgentProtocol.parse("", tools))
         assertNull(AgentProtocol.parse("   \n  ", tools))
