@@ -1,6 +1,7 @@
 package com.ayushig.localrag.internal
 
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * Holds the process-wide slot for the generation engine.
@@ -9,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * catchable error. Creation therefore goes through [acquire], and a refused caller runs without
  * a generator exactly as it would on any other engine failure.
  */
+@OptIn(ExperimentalAtomicApi::class)
 internal object EngineSlot {
     private val held = AtomicBoolean(false)
 
@@ -16,6 +18,6 @@ internal object EngineSlot {
     fun acquire(): Boolean = held.compareAndSet(false, true)
 
     fun release() {
-        held.set(false)
+        held.store(false)
     }
 }
