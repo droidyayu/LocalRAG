@@ -125,3 +125,152 @@ iosApp/                            thin Xcode shell, links the shared framework
 - **D4. iOS ships BM25-only plus generation, no embeddings, until the Swift spike shows a usable embedder.** Recommend accept.
 - **D5. Keep the Android demo module path `:app`?** Recommend rename to `:androidApp` for clarity; Maestro and scripts need a small update.
 - **D6. Physical iPhone available for the on-device check (A11)?** Needed for speed numbers and the GPU path. Needs your answer.
+
+---
+
+# Appendix A. Failure analysis
+
+Read from the current code on `main` (`ebf7086`). Items marked **Unverified** are not confirmed and each has a spike in "Spikes" below. Likelihood and impact are my estimate: H high, M medium, L low.
+
+## A1. Silent failures (worst kind: nothing errors, quality drops)
+
+| # | Failure | Where in today's code | L / I | Detected by | Mitigation |
+|---|---|---|---|---|---|
+| F1 | Tokenizer or regex behaves differently on iOS, so BM25 tokens differ and ranking drifts | `text/Tokenizer.kt` (`lowercaseChar`, character classification), `Markdown.kt`, `Chunker.kt`, `FrontMatterParser.kt` (regexes with `DOT_MATCHES_ALL`, `\d`, `\s`). JVM and Kotlin/Native use different Unicode tables and regex engines | M / H | A1, A3 with a Unicode corpus | Parity test includes accents, Devanagari, curly quotes, em dash, `₹`, emoji, NBSP. Prefer explicit char ranges over `\d`/`\s` in index paths |
+| F2 | Same query, different tie order (floating point last-digit, or map iteration order) | `Bm25Index`, `ReciprocalRankFusion`, `VectorIndex` | M / M | A1 compares ranked ids, scores with 1e-9 tolerance | Deterministic tie-break by chunk id. Grep core for `HashMap`/`HashSet` iteration that reaches a ranking |
+| F3 | Figure strings differ on iOS, so the output gate rejects true answers | `core/Formatters.kt` uses `NumberFormat` and `Locale.US`. The gate matches `\d(?:[\d,.]*\d)?` verbatim (`OutputGate.kt:96`). A different separator, narrow NBSP, or U+2212 minus breaks it | H if a platform formatter is used / H | A9 | Hand-written formatter, fixed locale, no platform formatter. Test with the device locale set to `de_DE` and `hi_IN` |
+| F4 | Date text differs (`d MMM yyyy, HH:mm`, local zone) | `Formatters.asOf`, `ZoneId.systemDefault()` | M / L | A9 | Explicit English month table, injected clock and zone in tests |
+| F5 | Vectors read in the wrong byte order or wrong length | `BundleReader.toFloatArrayLittleEndian` | L / H | A2, A4 | Explicit little-endian decode; round-trip test on iOS with a real vectors bundle |
+| F6 | `BundleReader` cannot read the JVM-written zip on iOS (data descriptors, deflate, entry order) | `BundleWriter` streams entries with `ZipOutputStream`; reader walks `ZipInputStream` | M / H (loud, not silent) | A2 on iOS | Reader reads whole bytes then parses. Spike: okio zip vs a minimal own reader. Golden bundle committed as a test resource and read on both platforms |
+| F7 | The "core is pure" check passes while checking nothing | `verifyNoPlatformDependencies` reads `runtimeClasspath`, which does not exist on a KMP module the same way. CI calls it by name | H / H | A8, CI | Rewrite the task for every target's compile classpath. Add a test that deliberately adds a forbidden dependency and expects red |
+
+## A2. Crashes and data loss
+
+| # | Failure | Where | L / I | Detected by | Mitigation |
+|---|---|---|---|---|---|
+| F8 | iOS kills the app (memory) with a 2.5 GB model loaded | `Generator` holds one `Engine`; Gemma 4 E2B is ~2.58 GB. iPhones with 6–8 GB RAM have a per-app limit well under that. **Unverified:** the exact limit for this model | H / H | A11, a memory soak flow | Request the increased-memory-limit entitlement; offer the 270M model as the iOS default; unload on memory warning; show the device RAM in the debug line. Decide the default model in spike S4 |
+| F9 | Memory warning arrives on the main thread while a generation runs on a background thread, and the engine is closed mid-call | `LocalRag.unloadModels()` closes `generator` while `runAgent` may be inside `generate`. Fields `bundle`, `retriever`, `embedder`, `generator`, `config` are plain `var`s with no lock. **This race exists on Android today**; iOS warnings are far more frequent | M / H | New test: unload during a running turn | `unloadModels` goes through `SingleFlight` and waits for the in-flight call; state changes under one mutex |
+| F10 | A new call "cancels" the previous one but the Swift generation keeps running, so two calls hit one native conversation | `SingleFlight.enter` cancels the old `Job` and does not wait for it. Kotlin cancellation does not stop a Swift `Task` by itself. **Unverified:** whether LiteRT-LM Swift can cancel (docs show no cancel API) | M / H | A7 with the Swift engine, plus a slow scripted engine | Seam gets `cancel()`. `SingleFlight` joins the previous owner before starting the next. Swift side wraps generation in a cancellable `Task` and checks `Task.isCancelled` between chunks |
+| F11 | Two engines alive at once after a model switch (`updateConfig` → release → create) because the old Swift object is freed later by ARC | `EngineSlot` counts Kotlin-side only | M / H | Model-switch flow, memory soak | `close()` on the seam must be synchronous and completed before `EngineSlot.release()`. Swift engine owns an explicit `shutdown()` |
+| F12 | Downloaded-bundle swap leaves a half file or is lost | `BundleLoader.install` uses `File.renameTo` | L / M | New test | iOS: `replaceItemAt`, written to Application Support, excluded from backup. Keep the "newer content version wins" rule |
+| F13 | Android's GPU probe and CPU fallback is Android-only, so iOS has no fallback when Metal loads but decodes garbage | `Generator.createOrNull`, `probeBackend` | M / M | A11 | Lift the policy (try GPU, probe for "OK", fall back to CPU, release the slot once) into common code over a `createEngine(backend)` seam |
+
+## A3. Build and tooling
+
+| # | Failure | Why | L / I | Mitigation |
+|---|---|---|---|---|
+| F14 | Kotlin 2.3.20 may not support Xcode 27.2 (very new). **Unverified** | Kotlin/Native pins supported Xcode ranges | M / H, and it blocks everything | Spike S1 first: build one `iosSimulatorArm64` target and run one test. If it fails, stop and pick the Kotlin version that supports the installed Xcode before any code moves |
+| F15 | AGP 9 does not allow the old Kotlin-multiplatform + `com.android.library` pairing. **Unverified:** the new `com.android.kotlin.multiplatform.library` plugin and the root `buildscript` override of KGP (`build.gradle.kts` comment) | Build files already carry a version hack | M / H | Spike S1. Keep the hack comment up to date |
+| F16 | KMP core inside an included build: the Gradle plugin and the Android SDK must pick the JVM variant, not another target | Dependency substitution with platform attributes can be ambiguous. `AGENTS.md` already records a Java 11 vs 17 attribute problem | M / H | Phase 2 gate. Keep `jvmTarget` 11 and the language-level pin on the jvm target |
+| F17 | Compose Multiplatform version and Kotlin 2.3.20 do not line up; Material3 and navigation APIs differ from AndroidX | CMP has its own versioning | M / M | Spike S1 includes a hello-world CMP screen on both platforms |
+| F18 | Swift package `LiteRTLM` (docs example `from: "0.12.0"`) vs Android `litertlm = "0.17.0"`: different versions may disagree on model file format. **Unverified** | `AGENTS.md` pins build-time and runtime embedding to one version | M / M | Pin the Swift package to the version matching 0.17.0 if one exists; otherwise record the gap in `AGENTS.md` and test the same `.litertlm` file on both |
+| F19 | Docs bundle does not reach the iOS app. The plugin writes assets through the AGP variant API, which has no iOS equivalent | `localrag-gradle-plugin` | H / H (loud) | New plugin output dir for iOS, copied by an Xcode run-script phase; a build check that the file is in the `.app` |
+| F20 | iOS CI cost and time | Needs a macOS runner; Kotlin/Native builds are slow; the model cannot be in CI | H / M | Scripted engine lane (see Appendix B). Real-model lane runs by hand or nightly on a Mac |
+| F21 | Swift is Early Preview; API can change under a minor bump | Docs label | M / M | One Swift file owns all LiteRT calls; exact version pin; upgrade is its own change |
+
+## A4. Maestro-specific traps found in today's flows
+
+| # | Trap | Evidence | Fix |
+|---|---|---|---|
+| M1 | `- back` is used to hide the keyboard before tapping Send. iOS has no back key | every question in `01_portfolio`, `02_docs`, `03_honesty` | Use `hideKeyboard`, or tap a neutral area; one common flow |
+| M2 | Runner is Android-only: `adb devices`, `adb logcat`, `adb exec-out screencap`, `adb shell cmd package` | `run_assistant_tests.sh` | Split into `lib/android.sh` and `lib/ios.sh` (`xcrun simctl install/launch/io screenshot/spawn log`) |
+| M3 | Logs for the report come from logcat tags `LocalRagChat`, `LocalRagAgent`, `LocalRag`. Kotlin `println` on iOS is not in the unified log | runner | iOS logger seam writes via `os_log` with subsystem and category; runner filters the same three names |
+| M4 | UI elements are found by visible text and `contentDescription` ("Ask something", "Send", "More", "Clear chat"). Compose on iOS may not expose placeholder text to the accessibility tree. **Unverified** | `ChatScreen.kt:476–510` | Add `testTag` on every element a flow touches; flows use `id:`. Spike S2 confirms CMP maps tags to `accessibilityIdentifier` |
+| M5 | `visible:` is a regex. The fallback text has `.` and `—`; the ready chip has `·` | flows | Keep strings in one `maestro/strings.yaml` (or env) and escape them; assert on a test tag where possible |
+| M6 | Answers depend on the real model choosing the right tool in the strict grammar, so the 10-question suite can flake or time out (3 min per turn, 30 min total, CPU-only simulator is slower) | `maestro/README.md` | Add a deterministic lane with a scripted engine (Appendix B) and keep the real-model suite as the second lane |
+| M7 | Model file lives in the app sandbox. Reinstall or `clearState` wipes it; the container path changes | `ModelFileLocator` uses `getExternalFilesDir` | `push_model_ios.sh` resolves the container with `simctl get_app_container … data` every run; flows never `clearState` except the no-model flow |
+| M8 | Open-source Maestro drives the iOS **simulator** only. A physical iPhone cannot be driven by it **(Unverified: confirm for the installed Maestro version)** | Maestro docs | A11 stays a manual, recorded run |
+| M9 | Ready label differs by platform: iOS has no embedder at first, so it reads `ready · bm25` even on an embeddings build | `ChatScreen.kt:584` | Expected label is a per-platform value in the runner |
+
+## A5. What I could not check from the code
+
+- Whether `Dispatchers.IO` and the Kotlin atomics API are stable enough on Kotlin/Native in the chosen versions (both likely fine; confirm in S1).
+- Swift `EmbeddingEngine`, the cancel API, the minimum iOS version (docs silent).
+- How many chunks the docs corpus makes and whether `queries.tsv` has enough Unicode rows to catch F1 (needs a read of the fixture in phase 0).
+- `DocsSearchScreen` strings. The Maestro flows below name them as placeholders to fill from the file.
+
+## A6. Spikes (cheap, early, each can stop the project)
+
+| Spike | Question | Done when | Kills the plan if |
+|---|---|---|---|
+| S1 | Does Kotlin 2.3.20 + AGP 9.3.2 + Gradle 9.5 + CMP build for iosSimulatorArm64 on Xcode 27.2, with an included build? | One common test passes on JVM and iOS sim; one CMP screen shows on both | Xcode unsupported and no Kotlin version fixes it |
+| S2 | Does CMP on iOS expose test tags and text to Maestro? | Maestro taps an `id:` and reads text on a CMP screen on the simulator | Tags do not surface (fall back to native SwiftUI shell for tests) |
+| S3 | Swift LiteRT-LM: load a `.litertlm`, generate, cancel, and embed? | A Swift command-line or small app prints a reply; cancel behavior recorded | Cannot cancel, or generation unusable on device |
+| S4 | Does the model fit on target iPhones? | Peak memory measured for E2B and 270M on a real device | Neither fits; iOS ships retrieval-only |
+
+---
+
+# Appendix B. Maestro test plan: a full RAG app on both platforms
+
+Goal: prove the whole chain on a running app, not just the parts. The chain is: Markdown docs → build-time index → bundle packed into the app → bundle loaded on device → retrieval → agent turn with the app's tools → output gate → label and text on screen. Same flows on Android and iOS.
+
+## B1. Four lanes
+
+| Lane | What runs | Model | Where | When | Why |
+|---|---|---|---|---|---|
+| L1 | Unit and parity tests (`commonTest`, JVM and iOS sim) | none | CI (macOS for iOS) | every push | Fast, catches F1–F7 |
+| L2 | **Scripted lane**: Maestro on the real app with a scripted generation engine | none (fake engine returns canned plans) | CI emulator + CI simulator | every PR | Deterministic. Exercises real bundle, real retrieval, real `AgentRunner`, real tools, real gate, real UI. Only the model is replaced |
+| L3 | **Real-model lane**: today's 10 questions plus the new flows | Gemma (270M on simulator, E2B on device) | Developer Mac, Android device | before merge of phases 3, 5, 6; nightly | Proves the model can drive the grammar |
+| L4 | Manual physical iPhone | E2B | iPhone | phase 6 and release | Speed, GPU, memory (F8) |
+
+The scripted engine is a `GenerationEngine` implementation (the seam from the spec). It returns plan text in the real agent grammar, taken from the fixtures `AgentRunnerTest` and `AgentProtocolTest` already use. It is selected by a debug launch argument (`launchApp: arguments:`), never in release builds. It also supports a slow mode (adds delay) for cancel and memory flows.
+
+## B2. What gets asserted
+
+Only code-owned text and ids, never model wording (same rule as today). Ids come from `testTag`s added in common code.
+
+| Fixed output | Source |
+|---|---|
+| `from your account`, `from the help documentation` | `ChatScreen.kt:291-292` |
+| the fallback sentence word for word | `NoInformationFallback` |
+| `ready · bm25` / `ready · hybrid` | `ChatScreen.kt:584` |
+| doc titles in retrieval results | front matter in `app/src/main/docs/*.md` |
+| bundle line: chunk count and content version | **new** debug line in the chat top bar (reads `LocalRagState.Ready`) |
+
+## B3. Flows
+
+Numbering keeps today's 01–03; scripted flows reuse the same questions so the two lanes compare directly. Platform differences use `runFlow: when: platform:`.
+
+| Flow | Lanes | Steps | Pass condition |
+|---|---|---|---|
+| `00_boot` | L2, L3 | launch, wait for ready chip, read bundle line | chip is the expected value for the platform (M9); chunk count and content version equal the values the build printed |
+| `10_retrieval` | L2, L3 | open Retrieval tab, search each query from `queries.tsv` (flow generated from the file) | top-1 title equals the expected title for every row, same on Android and iOS |
+| `11_retrieval_empty` | L2 | search a nonsense string | empty state shown, no crash |
+| `20_portfolio` | L2, L3 | today's `01_portfolio` questions | `from your account` after each; "Find my holding" shows the fallback |
+| `21_docs` | L2, L3 | today's `02_docs` | `from the help documentation` after the three covered questions; password reset shows the fallback |
+| `22_honesty` | L2, L3 | greeting, "Should I buy more stocks?" | no label, no fallback on the greeting; refusal text on the advice question |
+| `23_cancel` | L2 (slow mode) | send, Stop, send again | second answer arrives; no double answer; log shows one call in flight (F10, A7) |
+| `24_followup` | L2, L3 | ask worth, then "and the profit?" | second answer carries `from your account`; history never counted as grounding |
+| `25_model_switch` | L2, L3 | overflow menu, switch model, ask | engine reloads, ready chip returns, answer arrives; no second engine (F11) |
+| `30_memory_warning` | L2 | debug deep link triggers the same path as `onTrimMemory` / `didReceiveMemoryWarning`, then ask a docs question | chip drops to bm25-only and retrieval still works; generation falls back; next load recovers (F9) |
+| `31_relaunch` | L2, L3 | stop and relaunch | selected model persists; chat starts clean |
+| `40_no_model` | L2 | fresh state, no model file | missing-model banner shown; docs search still works; assistant shows the fallback |
+| `50_bad_bundle` | L2 | launch argument points at a fixture bundle with a mismatched embedding block | vectors dropped, BM25 used, reason logged (A4) |
+| `60_embeddings` | L3, Android only | build with `-PlocalRagEmbed=true` | `ready · hybrid` on Android; `ready · bm25` on iOS until a Swift embedder exists |
+
+Fixtures: a corrupted bundle, a mismatched-embedding bundle, and the real bundle, all produced by the plugin so the test also covers the plugin.
+
+## B4. Runner
+
+- `maestro/run_assistant_tests.sh --platform android|ios --lane scripted|model`.
+- Platform helpers: `maestro/lib/android.sh` (adb) and `maestro/lib/ios.sh` (`xcrun simctl`: boot, install, launch with arguments, `io booted screenshot`, `spawn booted log show --predicate`). Shared report format stays: `REPORT.md`, per-flow log, screenshot after each flow, filtered log.
+- `scripts/push_model_ios.sh e2b|270m` mirrors `push_model.sh`. It resolves the data container each run (M7).
+- Ready label and the per-platform expectations come from one file, not from `sed` into run copies. Keep the run-copy trick only if Maestro still cannot interpolate in that position.
+- Exit code is non-zero on any failed flow, so CI can gate on it.
+
+## B5. Which tests gate which phase
+
+| Phase | Must be green |
+|---|---|
+| 1 | L1 on JVM and iOS sim; A1, A2, A3, A8; S1 done |
+| 3 | L1; L3 Android suite unchanged (A12) |
+| 4 | S3 and S4 done; Swift engine unit tests; L1 |
+| 5 | L2 Android full; L3 Android |
+| 6 | L2 on iOS simulator; L3 on iOS simulator with 270M; L4 once |
+| 7 | all lanes; docs updated; this spec set to `done` |
+
+## B6. Not covered, on purpose
+
+- Exact model wording and exact figure text from the model. Figures are checked by unit tests (A9) and by reading screenshots.
+- Speed and battery. Measured by hand in L4.
+- Over-the-air bundle download: the seam exists, no downloader is built.
