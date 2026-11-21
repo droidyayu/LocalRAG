@@ -40,7 +40,7 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCS = ROOT / "app/src/main/docs"
+DOCS = ROOT / "androidApp/src/main/docs"
 
 # ---------------------------------------------------------------- tokenizer
 # Port of localrag-core Tokenizer: lowercase, keep & and %, drop stopwords.
@@ -215,7 +215,7 @@ TOOL_NAMES = {
 
 
 # ---------------------------------------------------------------- corpus
-# Paragraph chunks over app/src/main/docs (approximation of bundle chunks).
+# Paragraph chunks over androidApp/src/main/docs (approximation of bundle chunks).
 
 def load_corpus():
     chunks = []

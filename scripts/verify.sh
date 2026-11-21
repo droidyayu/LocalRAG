@@ -85,7 +85,7 @@ if [ "$QUICK" -eq 0 ]; then
         SDK_MODULE=":localrag"
         SDK_TASK="allTests"
     fi
-    DEMO_MODULE=":app"
+    DEMO_MODULE=":androidApp"
     [ -d androidApp ] && DEMO_MODULE=":androidApp"
 
     step "sdk tests (android host + ios sim)" $GRADLE "${SDK_MODULE}:${SDK_TASK}" --console=plain

@@ -7,7 +7,7 @@ prove the wired-up app answers, labels, and refuses correctly with a model aboar
 ## Run it
 
 ```bash
-./gradlew :app:installDebug          # once; model file must already be on the device
+./gradlew :androidApp:installDebug          # once; model file must already be on the device
 ./maestro/run_assistant_tests.sh
 ```
 
