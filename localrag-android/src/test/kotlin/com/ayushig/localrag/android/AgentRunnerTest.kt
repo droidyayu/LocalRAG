@@ -118,7 +118,7 @@ class AgentRunnerTest {
     @Test
     fun `off-grammar output ends the turn unresolved`() = runTest {
         val answer = AgentRunner().answer(
-            generate = scripted("Let me think about that..."),
+            generate = scripted("Let me think about that tomorrow"),
             query = "what is my portfolio worth",
             config = config(mapOf("get_portfolio_summary" to figures)),
         )
@@ -151,7 +151,12 @@ class AgentRunnerTest {
         val answer = AgentRunner().answer(
             generate = {
                 calls++
-                if (calls <= 3) "TOOL: get_portfolio_summary" else "ANSWER: Total $12,340.00."
+                when (calls) {
+                    1 -> "TOOL: get_portfolio_summary | slice=a"
+                    2 -> "TOOL: get_portfolio_summary | slice=b"
+                    3 -> "TOOL: get_portfolio_summary | slice=c"
+                    else -> "ANSWER: Total $12,340.00."
+                }
             },
             query = "summarise everything three times",
             config = config(mapOf("get_portfolio_summary" to figures)),
@@ -255,7 +260,7 @@ class AgentRunnerTest {
         assertTrue(final.timings.totalMs >= final.timings.toolMs)
 
         val unresolved = AgentRunner().answer(
-            generate = scripted("Let me think about that..."),
+            generate = scripted("Let me think about that tomorrow"),
             query = "what is my portfolio worth",
             config = config(mapOf("get_portfolio_summary" to figures)),
         ) as AgentOutcome.Unresolved
@@ -295,7 +300,6 @@ class AgentRunnerTest {
         var executions = 0
         val answer = AgentRunner().answer(
             generate = scripted(
-                "TOOL: get_portfolio_summary",
                 "TOOL: get_portfolio_summary",
                 "TOOL: get_portfolio_summary",
                 "ANSWER: Your portfolio is worth $12,340.00.",
