@@ -8,6 +8,8 @@
 #   --quick     core tests and the platform-dependency check only
 #   --skip-ios  skip steps that need Xcode (they are listed as SKIPPED, never as passed)
 #
+# Not run here (they need a booted simulator or a device): the Maestro lanes, see maestro/README.md.
+#
 # A step skipped by a flag is shown as SKIPPED and does not fail the run, so the table always says
 # what was left out. A step that is expected but could not start counts as NOT RUN and fails it.
 #
@@ -73,27 +75,26 @@ step "core tests (jvm)" $GRADLE -p localrag-tooling :localrag-core:jvmTest --con
 step "core stays platform-free" $GRADLE -p localrag-tooling :localrag-core:verifyNoPlatformDependencies --console=plain
 
 if [ "$QUICK" -eq 0 ]; then
-    if [ "$SKIP_IOS" -eq 0 ] && grep -q "iosSimulatorArm64" localrag-tooling/localrag-core/build.gradle.kts 2>/dev/null; then
+    if [ "$SKIP_IOS" -eq 0 ]; then
         step "core tests (ios simulator)" $GRADLE -p localrag-tooling :localrag-core:iosSimulatorArm64Test --console=plain
+        step "sdk tests (android host + ios sim)" $GRADLE :localrag:allTests --console=plain
+        step "shared tests (android host + ios sim)" $GRADLE :shared:allTests --console=plain
+        step "ios framework links" $GRADLE :shared:linkDebugFrameworkIosSimulatorArm64 --console=plain
+        if [ -d iosApp/Vendor/LiteRTLM ] && command -v xcodegen >/dev/null 2>&1; then
+            step "ios app builds (simulator)" bash -c 'cd iosApp && xcodegen generate >/dev/null && xcodebuild -project iosApp.xcodeproj -scheme iosApp -destination "platform=iOS Simulator,name=iPhone 18 Pro" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build'
+        else
+            skip "ios app builds (simulator)" "run scripts/ios_fetch_litertlm.sh and install xcodegen"
+        fi
     else
-        skip "core tests (ios simulator)" "no iOS target yet, or --skip-ios"
+        skip "ios steps (core, sdk, shared tests, framework, app)" "--skip-ios"
+        step "sdk tests (android host)" $GRADLE :localrag:testAndroidHostTest --console=plain
+        step "shared tests (android host)" $GRADLE :shared:testAndroidHostTest --console=plain
     fi
-
-    SDK_MODULE=":localrag-android"
-    SDK_TASK="testDebugUnitTest"
-    if [ -d localrag ]; then
-        SDK_MODULE=":localrag"
-        SDK_TASK="allTests"
-    fi
-    DEMO_MODULE=":androidApp"
-    [ -d androidApp ] && DEMO_MODULE=":androidApp"
-
-    step "sdk tests (android host + ios sim)" $GRADLE "${SDK_MODULE}:${SDK_TASK}" --console=plain
-    step "demo unit tests" $GRADLE "${DEMO_MODULE}:testDebugUnitTest" --console=plain
-    step "demo assembleDebug" $GRADLE "${DEMO_MODULE}:assembleDebug" --console=plain
-    step "docs bundle builds" $GRADLE "${DEMO_MODULE}:generateLocalRagBundle" --console=plain
+    step "android app unit tests" $GRADLE :androidApp:testDebugUnitTest --console=plain
+    step "android app assembleDebug" $GRADLE :androidApp:assembleDebug --console=plain
+    step "docs bundle builds" $GRADLE :androidApp:generateLocalRagBundle --console=plain
 else
-    skip "sdk, demo, bundle" "--quick"
+    skip "sdk, shared, app, bundle" "--quick"
 fi
 
 {
