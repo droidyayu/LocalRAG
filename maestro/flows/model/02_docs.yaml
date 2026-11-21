@@ -18,7 +18,7 @@ appId: com.ayushig.localrag.demo
 # Covered by deposit-funds.md.
 - tapOn: "Ask something"
 - inputText: 'How do I deposit funds?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from the help documentation"
@@ -29,7 +29,7 @@ appId: com.ayushig.localrag.demo
 # Covered by brokerage-charges.md.
 - tapOn: "Ask something"
 - inputText: 'What are the brokerage charges?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from the help documentation"
@@ -40,7 +40,7 @@ appId: com.ayushig.localrag.demo
 # Covered by close-account.md.
 - tapOn: "Ask something"
 - inputText: 'How do I close my account?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from the help documentation"
@@ -51,7 +51,7 @@ appId: com.ayushig.localrag.demo
 # No doc covers passwords: fixed fallback, word for word, never invented steps.
 - tapOn: "Ask something"
 - inputText: 'How do I reset my password?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: >-

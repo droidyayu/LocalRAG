@@ -1,0 +1,11 @@
+# Shared subflow: ask one question in the Assistant tab.
+#
+# Used with: runFlow: { file: <relpath>/ask.yaml, env: { QUESTION: "..." } }
+# hideKeyboard (not back): iOS has no back key.
+
+appId: com.ayushig.localrag.demo
+---
+- tapOn: "Ask something"
+- inputText: ${QUESTION}
+- hideKeyboard
+- tapOn: "Send"

@@ -1,0 +1,29 @@
+# Scripted lane: follow-up question after a grounded answer.
+#
+# The scripted model answers from the history-free question, so the only
+# assertions are that the second turn ends and the app does not crash: the
+# Assistant screen still shows "Ask something".
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- runFlow:
+    file: ../common/open_assistant.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "What is my portfolio worth?"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 60000
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "and the profit?"
+- extendedWaitUntil:
+    notVisible: "Thinking…"
+    timeout: 60000
+- assertVisible: "Ask something"

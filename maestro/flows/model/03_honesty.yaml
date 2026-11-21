@@ -20,7 +20,7 @@ appId: com.ayushig.localrag.demo
 # Small talk: answered, not labelled, not a fallback.
 - tapOn: "Ask something"
 - inputText: 'Hi'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     notVisible: "Thinking…"
@@ -33,7 +33,7 @@ appId: com.ayushig.localrag.demo
 # sentence, so assert its stable core (regex search semantics tolerate trailing words).
 - tapOn: "Ask something"
 - inputText: 'Should I buy more stocks?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "can't advise on buying or selling"
@@ -46,6 +46,6 @@ appId: com.ayushig.localrag.demo
 # No assertions — the runner screenshot plus logcat show whether the turn died clean.
 - tapOn: "Ask something"
 - inputText: 'Summarise my entire portfolio in detail'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - tapOn: "Stop"

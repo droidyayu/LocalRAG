@@ -1,0 +1,12 @@
+# Shared subflow: launch the app with the scripted-slow engine selected.
+#
+# Maestro does not interpolate env variables inside launch arguments, so each mode has its own file.
+
+appId: com.ayushig.localrag.demo
+---
+- launchApp:
+    appId: com.ayushig.localrag.demo
+    stopApp: true
+    clearState: true
+    arguments:
+      localrag.engine: scripted-slow

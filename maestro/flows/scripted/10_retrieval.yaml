@@ -1,0 +1,68 @@
+# Scripted lane: one retrieval search per query, top-1 chunk id asserted.
+#
+# `visible:` is a regex, hence the `.*<id>.*` wrappers. Between searches the
+# app is relaunched to clear the query field: the field keeps its text across tab
+# switches and select-all is not available on both platforms.
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- tapOn: "Retrieval"
+
+# how do I deposit funds -> deposit-funds
+- tapOn: "Ask the docs"
+- inputText: "how do I deposit funds"
+- hideKeyboard
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: ".*deposit-funds.*"
+    timeout: 60000
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- tapOn: "Retrieval"
+
+# brokerage charges -> brokerage-charges
+- tapOn: "Ask the docs"
+- inputText: "brokerage charges"
+- hideKeyboard
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: ".*brokerage-charges.*"
+    timeout: 60000
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- tapOn: "Retrieval"
+
+# close my account -> close-account
+- tapOn: "Ask the docs"
+- inputText: "close my account"
+- hideKeyboard
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: ".*close-account.*"
+    timeout: 60000
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- tapOn: "Retrieval"
+
+# gold storage -> gold-storage
+- tapOn: "Ask the docs"
+- inputText: "gold storage"
+- hideKeyboard
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: ".*gold-storage.*"
+    timeout: 60000
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- tapOn: "Retrieval"
+
+# overnight charges -> overnight-charges
+- tapOn: "Ask the docs"
+- inputText: "overnight charges"
+- hideKeyboard
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: ".*overnight-charges.*"
+    timeout: 60000
