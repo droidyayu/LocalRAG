@@ -91,7 +91,7 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.litertlm.android)
-    implementation(project(":localrag-android"))
+    implementation(project(":localrag"))
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
