@@ -4,6 +4,7 @@ import com.ayushig.localrag.core.bundle.BundleEntries
 import com.ayushig.localrag.core.bundle.BundleFormatException
 import com.ayushig.localrag.core.bundle.BundleReader
 import com.ayushig.localrag.core.bundle.BundleWriter
+import com.ayushig.localrag.core.bundle.read
 import com.ayushig.localrag.core.bundle.EmbeddingInfo
 import com.ayushig.localrag.core.document.Chunker
 import com.ayushig.localrag.core.index.VectorIndex
