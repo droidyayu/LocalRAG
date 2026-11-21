@@ -22,12 +22,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ayushig.localrag.demo.resources.Res
+import com.ayushig.localrag.demo.resources.ic_arrow_back
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
-import com.ayushig.localrag.demo.R
 import com.ayushig.localrag.demo.core.Formatters
 import com.ayushig.localrag.demo.domain.model.portfolio.CategorySummary
 import com.ayushig.localrag.demo.ui.portfolio.components.HoldingListSkeleton
@@ -64,7 +65,7 @@ fun CategoryDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back),
+                            painter = painterResource(Res.drawable.ic_arrow_back),
                             contentDescription = "Back",
                         )
                     }

@@ -16,7 +16,12 @@ import com.ayushig.localrag.demo.domain.usecase.portfolio.GetMetalHoldingsUseCas
 import com.ayushig.localrag.demo.domain.usecase.portfolio.GetPortfolioSummaryUseCase
 import com.ayushig.localrag.demo.domain.usecase.portfolio.GetStockHoldingsUseCase
 import com.ayushig.localrag.demo.domain.usecase.portfolio.GetWealthInvestmentsUseCase
+import com.ayushig.localrag.demo.ui.chat.ChatViewModel
+import com.ayushig.localrag.demo.ui.docs.DocsSearchViewModel
+import com.ayushig.localrag.demo.ui.portfolio.detail.CategoryDetailViewModel
+import com.ayushig.localrag.demo.ui.portfolio.home.PortfolioHomeViewModel
 import org.koin.core.module.Module
+import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 /**
@@ -56,4 +61,9 @@ val sharedModule: Module = module {
     }
 
     single { LocalRagConfigFactory(get(), get(), get()) }
+
+    viewModelOf(::ChatViewModel)
+    viewModelOf(::DocsSearchViewModel)
+    viewModelOf(::PortfolioHomeViewModel)
+    viewModelOf(::CategoryDetailViewModel)
 }

@@ -1,15 +1,12 @@
 package com.ayushig.localrag.demo.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -23,6 +20,9 @@ private val LightColorScheme = lightColorScheme(
     tertiary = Pink40,
 )
 
+/** Platform dynamic colour: Material You on Android 12+, absent everywhere else. */
+internal expect @Composable fun dynamicColorScheme(darkTheme: Boolean): ColorScheme?
+
 @Composable
 fun LocalRAGTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -30,15 +30,8 @@ fun LocalRAGTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val dynamicScheme = if (dynamicColor) dynamicColorScheme(darkTheme) else null
+    val colorScheme = dynamicScheme ?: if (darkTheme) DarkColorScheme else LightColorScheme
 
     CompositionLocalProvider(
         LocalFinanceColors provides if (darkTheme) DarkFinanceColors else LightFinanceColors,

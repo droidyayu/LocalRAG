@@ -3,8 +3,8 @@ package com.ayushig.localrag.demo
 import com.ayushig.localrag.demo.ui.navigation.AssistantRoute
 import com.ayushig.localrag.demo.ui.navigation.PortfolioRoute
 import com.ayushig.localrag.demo.ui.navigation.RetrievalRoute
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 /**
  * The third tab is the retrieval-accuracy surface, not a profile screen.

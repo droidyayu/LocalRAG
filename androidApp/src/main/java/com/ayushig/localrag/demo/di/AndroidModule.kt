@@ -9,13 +9,8 @@ import com.ayushig.localrag.demo.platform.AndroidModelSelection
 import com.ayushig.localrag.demo.platform.AppInfo
 import com.ayushig.localrag.demo.platform.ModelFiles
 import com.ayushig.localrag.demo.platform.ModelSelection
-import com.ayushig.localrag.demo.ui.chat.ChatViewModel
-import com.ayushig.localrag.demo.ui.docs.DocsSearchViewModel
-import com.ayushig.localrag.demo.ui.portfolio.detail.CategoryDetailViewModel
-import com.ayushig.localrag.demo.ui.portfolio.home.PortfolioHomeViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
-import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 /**
@@ -45,9 +40,4 @@ val androidModule: Module = module {
             config = get<LocalRagConfigFactory>().create(),
         )
     }
-
-    viewModelOf(::ChatViewModel)
-    viewModelOf(::DocsSearchViewModel)
-    viewModelOf(::PortfolioHomeViewModel)
-    viewModelOf(::CategoryDetailViewModel)
 }
