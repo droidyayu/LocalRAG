@@ -14,10 +14,11 @@ fun LocalRag.Companion.create(
     context: Context,
     config: LocalRag.Config,
     signatureVerifier: SignatureVerifier = SignatureVerifier.RejectAll,
+    generationBackend: GenerationBackend? = null,
 ): LocalRag = LocalRag(
     platform = AndroidPlatform(context.applicationContext),
     config = config,
     signatureVerifier = signatureVerifier,
-    generationBackend = LiteRtGenerationBackend(),
+    generationBackend = generationBackend ?: LiteRtGenerationBackend(),
     embeddingBackend = LiteRtEmbeddingBackend(),
 )
