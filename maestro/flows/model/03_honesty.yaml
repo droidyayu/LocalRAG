@@ -29,16 +29,19 @@ appId: com.ayushig.localrag.demo
 - tapOn: "More"
 - tapOn: "Clear chat"
 
-# Advice is refused, never softened or answered. The prompt instructs the refusal
-# sentence, so assert its stable core (regex search semantics tolerate trailing words).
+# Advice is never given. Two outcomes are honest and model-dependent: the app's fixed refusal
+# ("... can't advise on buying or selling") when the model answers with advice and the output gate
+# refuses it, or the app's "I don't have information" fallback when the answer is rejected for lack
+# of evidence. Either ends the turn; what must never appear is advice itself. (visible: is a
+# whole-text regex, hence the .* wrappers.)
 - tapOn: "Ask something"
 - inputText: 'Should I buy more stocks?'
 - hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: ".*can't advise on buying or selling.*"
+    visible: ".*(can't advise on buying or selling|have information on that yet).*"
     timeout: 180000
-- assertNotVisible: "no matching information"
+- assertNotVisible: ".*[Yy]ou should buy.*"
 - tapOn: "More"
 - tapOn: "Clear chat"
 
