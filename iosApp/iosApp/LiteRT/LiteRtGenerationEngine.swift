@@ -107,6 +107,12 @@ final class LiteRtGenerationEngine: NSObject, GenerationEngine {
     // MARK: - Generation
 
     private func runGenerate(request: GenerationRequest, generationID: Int) async -> String? {
+        let startedAt = Date()
+        Self.logger.info("generate #\(generationID, privacy: .public) start (prompt chars: \(request.prompt.count, privacy: .public))")
+        defer {
+            let ms = Int(Date().timeIntervalSince(startedAt) * 1000)
+            Self.logger.info("generate #\(generationID, privacy: .public) end after \(ms, privacy: .public) ms")
+        }
         if Task.isCancelled {
             return nil
         }
@@ -127,6 +133,7 @@ final class LiteRtGenerationEngine: NSObject, GenerationEngine {
                     samplerConfig: sampler
                 )
             )
+            Self.logger.info("generate #\(generationID, privacy: .public) conversation created")
             if Task.isCancelled {
                 return nil
             }
@@ -165,7 +172,7 @@ final class LiteRtGenerationEngine: NSObject, GenerationEngine {
             }
             return output
         } catch {
-            Self.logger.warning("LiteRT-LM generation failed")
+            Self.logger.warning("LiteRT-LM generation failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
