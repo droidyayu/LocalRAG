@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ayushig.localrag.demo.core.Formatters
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 /** Total value, the gain or loss beneath it, and when the snapshot was taken. */
 @Composable

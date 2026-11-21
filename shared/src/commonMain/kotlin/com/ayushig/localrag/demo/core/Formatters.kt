@@ -13,9 +13,9 @@ import kotlinx.datetime.toLocalDateTime
  * Signed variants always emit an explicit + or -, because colour alone must never carry the sign.
  *
  * Hand-written fixed-locale formatting: the JDK formatters (NumberFormat, String.format) are
- * JVM-only, so this formats from the exact binary value of the double with the same rounding
- * each JDK call used (HALF_EVEN for the NumberFormat paths, HALF_UP for the String.format price
- * path). FormattersGoldenTest pins every string against the JVM golden.
+ * JVM-only. The NumberFormat paths format the exact binary value of the double, HALF_EVEN;
+ * price formats the shortest round-trip decimal (the Double.toString digits), HALF_UP, which is
+ * what java.util.Formatter rounds. FormattersGoldenTest pins every string against the JVM golden.
  */
 object Formatters {
 
@@ -41,7 +41,7 @@ object Formatters {
 
     /** A price quoted to as many decimals as the instrument needs, e.g. 4 for FX. */
     fun price(value: Double, decimals: Int = 2): String =
-        withSign(value, fixed(value, decimals = decimals, mode = Rounding.HALF_UP))
+        withSign(value, fixedShortest(value, decimals))
 
     /** Whole units where the count is an integer, e.g. \"120 shares\". */
     fun shares(quantity: Int): String =
@@ -78,6 +78,70 @@ object Formatters {
      */
     private fun withSign(value: Double, unsigned: String): String =
         if (value.toRawBits() < 0L && !unsigned.startsWith('-')) "-$unsigned" else unsigned
+
+    /**
+     * Fixed-point rendering of the shortest round-trip decimal of the double (the digits of
+     * Double.toString in plain or E notation), rounded HALF_UP. This is what java.util.Formatter
+     * rounds for %f: it works from the shortest decimal that maps back to the double, not from
+     * the exact binary expansion, so 136918.395 reads 136,918.40 rather than 136,918.39.
+     * Returns the unsigned body; callers add the sign with [withSign].
+     */
+    private fun fixedShortest(value: Double, decimals: Int): String {
+        if (!value.isFinite()) {
+            // No portfolio figure is ever non-finite; render plainly rather than guessing.
+            return value.toString()
+        }
+        val text = value.toString()
+        val unsigned = if (text.startsWith('-')) text.substring(1) else text
+        val eIndex = unsigned.indexOf('E')
+        val mantissa = if (eIndex < 0) unsigned else unsigned.substring(0, eIndex)
+        val sciExp = if (eIndex < 0) 0 else unsigned.substring(eIndex + 1).toInt()
+        val point = mantissa.indexOf('.')
+        val intDigits = if (point < 0) mantissa else mantissa.substring(0, point)
+        val fracDigits = if (point < 0) "" else mantissa.substring(point + 1)
+        val stripped = (intDigits + fracDigits).trimStart('0')
+        // The integer value of the digit string is unchanged by stripping leading zeros, so the
+        // decimal exponent below still holds: value = stripped * 10^exp.
+        val exp = sciExp - fracDigits.length
+        if (stripped.isEmpty()) {
+            return if (decimals == 0) "0" else "0." + "0".repeat(decimals)
+        }
+        val shift = exp + decimals
+        val rounded: String = if (shift >= 0) {
+            stripped + "0".repeat(shift)
+        } else {
+            val drop = -shift
+            val full = stripped.padStart(drop + 1, '0')
+            val kept = full.substring(0, full.length - drop)
+            val dropped = full.substring(full.length - drop)
+            val half = "5" + "0".repeat(drop - 1)
+            if (dropped >= half) increment(kept) else kept
+        }
+        return if (decimals == 0) {
+            grouped(rounded)
+        } else if (rounded.length <= decimals) {
+            "0." + rounded.padStart(decimals, '0')
+        } else {
+            grouped(rounded.substring(0, rounded.length - decimals)) + "." +
+                rounded.substring(rounded.length - decimals)
+        }
+    }
+
+    /** Adds one to a non-empty digit string. */
+    private fun increment(digits: String): String {
+        val chars = digits.toCharArray()
+        var index = chars.size - 1
+        while (index >= 0) {
+            if (chars[index] == '9') {
+                chars[index] = '0'
+                index -= 1
+            } else {
+                chars[index] = chars[index] + 1
+                return chars.concatToString()
+            }
+        }
+        return "1" + chars.concatToString()
+    }
 
     /**
      * Fixed-point rendering of the exact binary value, US grouping, explicit rounding mode.
