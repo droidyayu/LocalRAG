@@ -31,4 +31,5 @@ includeBuild("localrag-tooling")
 
 include(":app")
 include(":localrag")
+include(":shared")
  
