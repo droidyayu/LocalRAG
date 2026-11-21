@@ -1,6 +1,6 @@
 # Spec: Kotlin Multiplatform + iOS
 
-- Status: **draft** (not agreed; do not build until the owner says so)
+- Status: **agreed** (2026-11-21). Build in progress per Appendix C.
 - Risk tier: **medium** (public SDK contract and build system change; no auth, money, or user data)
 - Scope: this repository only (LocalRAG). Nothing here goes into the platform repo or any service repo.
 
@@ -117,7 +117,7 @@ iosApp/                            thin Xcode shell, links the shared framework
 - 2.5 GB model on a simulator is slow and uses a lot of disk. Mitigation: CPU backend, small Gemma 3 270M for simulator checks.
 - Muse writes code; Claude reviews. Phase 1 and the Swift engine are the two places Claude should read every line.
 
-## Decisions for the owner
+## Decisions for the owner (all settled 2026-11-21: recommendations accepted)
 
 - **D1. iOS minimum version and devices.** Recommend iOS 17+, iPhone only, simulator on Apple silicon (no x86 simulator). Why: Metal GPU and the memory a 2.5 GB model needs.
 - **D2. Rename `localrag-android` to `localrag` and move the package to `com.ayushig.localrag`.** Recommend yes: version is 0.1.0 and only the demo consumes it, so the break is free now and costly later. Alternative: keep the old names and add an iOS-only module (worse, two public APIs).
@@ -348,3 +348,13 @@ Rule from the factory: a script does deterministic work, Muse does reading and b
 2. Owner confirms the `kmp-ios` integration branch.
 3. M0 result: what Muse's sandbox can run.
 4. Autonomy level for this repo (how many merges the owner wants to approve one by one).
+
+---
+
+# Appendix D. Decisions and operating rules (2026-11-21)
+
+- D1 iOS 17+, iPhone only. D2 rename to `localrag`. D3 Koin. D4 iOS without embeddings at first. D5 `:androidApp`. D8 branch and Muse sandbox check: yes.
+- **D6 not answered.** Assumed: no physical iPhone. iOS is proven on the simulator (CPU), the iOS default model is Gemma 3 270M, and F8 (memory) stays marked unverified until a device check happens.
+- **Approval:** Claude reviews every Muse diff and merges tasks into `kmp-ios` on green evidence. The owner does not approve individual merges.
+- **Delivery:** when everything works (all lanes in B5 green, as far as the environment can run them, with the gaps listed), Claude opens one pull request `kmp-ios` -> `main` with the evidence bundle. The owner reviews and merges that one.
+- Operating model: the owner gives intent; Claude asks only questions that change the outcome, has Muse write the code, reviews, tests, and hands over working code.
