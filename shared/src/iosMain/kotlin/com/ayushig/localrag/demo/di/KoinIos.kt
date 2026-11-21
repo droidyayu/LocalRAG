@@ -5,6 +5,10 @@ import com.ayushig.localrag.GenerationBackend
 import com.ayushig.localrag.LocalRag
 import com.ayushig.localrag.create
 import com.ayushig.localrag.demo.data.LocalRagConfigFactory
+import com.ayushig.localrag.demo.debug.ScriptedGenerationBackend
+import com.ayushig.localrag.demo.debug.ScriptedModelFiles
+import com.ayushig.localrag.demo.debug.launchEngineMode
+import com.ayushig.localrag.demo.debug.scriptedDelayMillis
 import com.ayushig.localrag.demo.platform.AppInfo
 import com.ayushig.localrag.demo.platform.IosModelFiles
 import com.ayushig.localrag.demo.platform.IosModelSelection
@@ -32,16 +36,29 @@ fun iosPlatformModule(
     generationBackend: GenerationBackend?,
     embeddingBackend: EmbeddingBackend?,
 ): Module = module {
-    single<ModelFiles> { IosModelFiles() }
+    single<ModelFiles> {
+        if (scriptedDelayMillis(launchEngineMode()) != null) ScriptedModelFiles()
+        else IosModelFiles()
+    }
     single<ModelSelection> { IosModelSelection() }
     single { appInfo }
 
     single<LocalRag> {
-        LocalRag.create(
-            config = get<LocalRagConfigFactory>().create(),
-            generationBackend = generationBackend,
-            embeddingBackend = embeddingBackend,
-        )
+        val delay = scriptedDelayMillis(launchEngineMode())
+        val config = get<LocalRagConfigFactory>().create()
+        if (delay != null) {
+            LocalRag.create(
+                config = config.copy(generationModelPath = "scripted"),
+                generationBackend = ScriptedGenerationBackend(slowMillis = delay),
+                embeddingBackend = embeddingBackend,
+            )
+        } else {
+            LocalRag.create(
+                config = config,
+                generationBackend = generationBackend,
+                embeddingBackend = embeddingBackend,
+            )
+        }
     }
 }
 

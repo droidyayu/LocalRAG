@@ -4,6 +4,10 @@ import com.ayushig.localrag.LocalRag
 import com.ayushig.localrag.create
 import com.ayushig.localrag.demo.BuildConfig
 import com.ayushig.localrag.demo.data.LocalRagConfigFactory
+import com.ayushig.localrag.demo.debug.ScriptedGenerationBackend
+import com.ayushig.localrag.demo.debug.ScriptedModelFiles
+import com.ayushig.localrag.demo.debug.launchEngineMode
+import com.ayushig.localrag.demo.debug.scriptedDelayMillis
 import com.ayushig.localrag.demo.platform.AndroidModelFiles
 import com.ayushig.localrag.demo.platform.AndroidModelSelection
 import com.ayushig.localrag.demo.platform.AppInfo
@@ -18,7 +22,12 @@ import org.koin.dsl.module
  * The shared graph holds everything else.
  */
 val androidModule: Module = module {
-    single<ModelFiles> { AndroidModelFiles(androidContext()) }
+    // Read lazily: MainActivity sets the launch mode after Application.onCreate, before any
+    // resolution happens.
+    single<ModelFiles> {
+        if (scriptedDelayMillis(launchEngineMode()) != null) ScriptedModelFiles()
+        else AndroidModelFiles(androidContext())
+    }
     single<ModelSelection> { AndroidModelSelection(androidContext()) }
     single {
         AppInfo(
@@ -35,9 +44,19 @@ val androidModule: Module = module {
      * Model switches go through LocalRag.updateConfig, never a new instance.
      */
     single<LocalRag> {
-        LocalRag.create(
-            context = androidContext(),
-            config = get<LocalRagConfigFactory>().create(),
-        )
+        val delay = scriptedDelayMillis(launchEngineMode())
+        val config = get<LocalRagConfigFactory>().create()
+        if (delay != null) {
+            LocalRag.create(
+                context = androidContext(),
+                config = config.copy(generationModelPath = "scripted"),
+                generationBackend = ScriptedGenerationBackend(slowMillis = delay),
+            )
+        } else {
+            LocalRag.create(
+                context = androidContext(),
+                config = config,
+            )
+        }
     }
 }
