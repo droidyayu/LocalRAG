@@ -164,4 +164,29 @@ class ScriptedModelTest {
 
         assertEquals("ANSWER: Brokerage is 0.03 percent per order.", reply)
     }
+
+    // The output gate rejects an answer that does not end a sentence (truncated output), so a
+    // quoted observation or passage must end with a full stop; the figures inside stay verbatim.
+    @Test
+    fun anAnswerQuotedFromAnObservationEndsWithAFullStop() {
+        val observation = "total value: \$169,363.92\ntotal profit and loss: +\$8,693.25"
+        val reply = ScriptedModel.reply(prompt("What is my portfolio worth?", null, "get_portfolio_summary" to observation))
+
+        assertTrue(reply.endsWith("."), reply)
+        assertTrue(reply.contains("+\$8,693.25."), "the full stop follows the figure without changing it: $reply")
+    }
+
+    @Test
+    fun anAnswerQuotedFromAPassageWithoutAFullStopGetsOne() {
+        val reply = ScriptedModel.reply(prompt("What are the brokerage charges?", "Brokerage charges — overview\nBrokerage is 0.03 percent per order"))
+
+        assertEquals("ANSWER: Brokerage is 0.03 percent per order.", reply)
+    }
+
+    @Test
+    fun anAnswerThatAlreadyEndsASentenceIsLeftAlone() {
+        val reply = ScriptedModel.reply(prompt("What are the brokerage charges?", "Brokerage charges — overview\nBrokerage is 0.03 percent per order!"))
+
+        assertEquals("ANSWER: Brokerage is 0.03 percent per order!", reply)
+    }
 }
