@@ -38,3 +38,4 @@ maestro/report/
 # iOS app: the Xcode project is generated from iosApp/project.yml (xcodegen generate)
 iosApp/iosApp.xcodeproj/
 iosApp/build/
+iosApp/Vendor/

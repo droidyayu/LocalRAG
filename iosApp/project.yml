@@ -9,10 +9,12 @@ settings:
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
+# The LiteRT-LM Swift package is fetched by scripts/ios_fetch_litertlm.sh (sparse clone plus a
+# checksum-verified binary download at the version pinned in gradle/libs.versions.toml). On a fast
+# network the upstream remote package works too: url https://github.com/google-ai-edge/LiteRT-LM.
 packages:
   LiteRTLM:
-    url: https://github.com/google-ai-edge/LiteRT-LM
-    exactVersion: 0.17.0
+    path: Vendor/LiteRTLM
 targets:
   iosApp:
     type: application
@@ -29,9 +31,14 @@ targets:
         FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
         OTHER_LDFLAGS: "-framework Shared"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # Apple silicon simulators only (decision D1): the Kotlin framework has no x86_64 slice.
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
     preBuildScripts:
       - name: Build the Kotlin framework
         script: |
           cd "$SRCROOT/.."
-          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+          export PATH="/opt/homebrew/bin:$PATH"
+          export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home}"
+          GRADLE="$(command -v gradle || echo ./gradlew)"
+          "$GRADLE" :shared:embedAndSignAppleFrameworkForXcode
         basedOnDependencyAnalysis: false
