@@ -143,7 +143,8 @@ class AssistantToolDefinitionsTest {
     fun `unknown tool and failed reads yield null`() = runTest {
         val tools = tools()
         assertNull(tools.call("delete_portfolio", emptyMap()))
-        assertNull(tools.call("search_documentation", mapOf("query" to "gtt")))
+        // Documentation is pre-searched each turn; it is no longer a callable tool.
+        assertTrue(tools.list().none { it.name == "search_documentation" })
 
         val failing = object : StubRepo() {}
         assertNull(AssistantToolDefinitions(failing).call("get_portfolio_summary", emptyMap()))
