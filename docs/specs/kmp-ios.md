@@ -358,3 +358,21 @@ Rule from the factory: a script does deterministic work, Muse does reading and b
 - **Approval:** Claude reviews every Muse diff and merges tasks into `kmp-ios` on green evidence. The owner does not approve individual merges.
 - **Delivery:** when everything works (all lanes in B5 green, as far as the environment can run them, with the gaps listed), Claude opens one pull request `kmp-ios` -> `main` with the evidence bundle. The owner reviews and merges that one.
 - Operating model: the owner gives intent; Claude asks only questions that change the outcome, has Muse write the code, reviews, tests, and hands over working code.
+
+---
+
+# Appendix E. Spike results and plan changes (2026-11-21)
+
+| Spike | Result |
+|---|---|
+| S1 toolchain | **Passed.** Kotlin 2.3.20 + AGP 9.3.2 + Gradle 9.5/9.8 + Xcode 27.2 build and test for the iOS simulator. AGP 9 needs `com.android.kotlin.multiplatform.library` for KMP modules; works first try. Included-build substitution of a KMP core works (JVM variant is picked). CMP 1.12.2 and Koin 4.2.2 work; androidx navigation and lifecycle KMP 2.10/2.11 are built with a newer Kotlin than 2.3.20, so the pins are navigation 2.9.2 and lifecycle 2.9.6. |
+| S3 Swift engine (macOS, CPU, E2B model, LiteRT-LM Swift 0.17.0, same version as Android) | **Passed.** Engine initializes in under a second when cached; the "reply with exactly: OK" probe returns OK, so the shared GPU probe and fallback policy applies unchanged. `sendMessageStream` stops within a millisecond of `Task.cancel()` (50 chunks, not the full 300): cancellation works, which F10 depended on. **Do not set `maxNumTokens` to 512**: the engine fails to allocate tensors ("DYNAMIC_UPDATE_SLICE"); leave it unset (default). **Swift 0.17.0 does ship an `EmbeddingEngine` actor** (the docs page does not mention it), so iOS hybrid retrieval is possible; D4 stays as the first-pass default and the embedder moves to a follow-up. SwiftPM minimum iOS is 15; our target stays iOS 17. |
+| S4 memory on a physical iPhone | **Open.** Needs the iPhone reconnected. E2B is 2.4 GB. |
+| F6 zip reading on iOS | Passed: okio `openZip` reads the JVM-written bundle; golden test on the simulator. |
+| F1 and F2 parity | Passed: 45 tokenizer traps, 8 documents, 22 queries and a 1,700-value formatter golden agree between JVM and the iOS simulator. |
+
+## Changes to the plan
+
+- The Swift engine lives in the iOS app target (`iosApp/`), not in a separate `localrag-ios` package. A separate package would need a binary dependency on the Gradle-built Kotlin framework, which is a build output. Host apps copy the three small Swift files.
+- `NavigationSuiteScaffold` is replaced by `Scaffold` + `NavigationBar` in common code (the adaptive suite is not in stable Compose Multiplatform).
+- Muse found and Claude confirmed the concurrency defects listed in the task records (SingleFlight chain, embedder closed under a query, lost model switch). They are fixed and pinned by tests.
