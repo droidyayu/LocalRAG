@@ -23,7 +23,7 @@ class LocalRagConfigFactory @Inject constructor(
 
     fun create(option: ModelOption = selected()): LocalRag.Config =
         LocalRag.Config(
-            cacheDir = context.cacheDir,
+            cacheDir = context.cacheDir.path,
             appVersion = "4.5",
             topK = 4,
             generationModelPath = locator.fileFor(option).absolutePath.takeIf {

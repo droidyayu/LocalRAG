@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.LiteRtLmJniException
 import com.google.ai.edge.litertlm.SamplerConfig
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.toList
 
 /**
@@ -55,6 +56,10 @@ internal class LiteRtGenerationBackend : GenerationBackend {
             } finally {
                 runCatching { conversation.close() }
             }
+        } catch (cancelled: CancellationException) {
+            // On the JVM CancellationException is an IllegalStateException: it must propagate so
+            // a superseded turn ends cancelled, never as a null-based Unresolved result.
+            throw cancelled
         } catch (failure: LiteRtLmJniException) {
             null
         } catch (failure: IllegalStateException) {

@@ -2,6 +2,7 @@ package com.ayushig.localrag.demo.di
 
 import android.content.Context
 import com.ayushig.localrag.LocalRag
+import com.ayushig.localrag.create
 import com.ayushig.localrag.demo.data.LocalRagConfigFactory
 import dagger.Module
 import dagger.Provides
