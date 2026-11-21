@@ -5,6 +5,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+compose.resources {
+    packageOfResClass = "com.ayushig.localrag.demo.resources"
+    generateResClass = always
+}
+
 kotlin {
     androidLibrary {
         namespace = "com.ayushig.localrag.demo.shared"
@@ -33,6 +38,7 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
+            implementation(libs.koin.core.viewmodel)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.coroutines.core)
         }
