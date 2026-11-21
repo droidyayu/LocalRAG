@@ -101,3 +101,31 @@ internal class ControllableEngine(private val backend: ControllableGenerationBac
         }
     }
 }
+
+/** An embedding backend whose engine runs a hook in the middle of embed(), then reports whether it was already closed. */
+internal class ReentrantEmbeddingBackend(private val duringEmbed: () -> Unit) : EmbeddingBackend {
+    val engine = ReentrantEmbeddingEngine(duringEmbed)
+
+    override fun load(modelPath: String, cacheDir: String, spec: EmbeddingSpec): EmbeddingEngine {
+        engine.dimensions = spec.dimensions
+        return engine
+    }
+}
+
+internal class ReentrantEmbeddingEngine(private val duringEmbed: () -> Unit) : EmbeddingEngine {
+    override var dimensions: Int = 0
+    var closeCalls = 0
+        private set
+    var closedDuringEmbed = false
+        private set
+
+    override fun embed(text: String): FloatArray? {
+        duringEmbed()
+        if (closeCalls > 0) closedDuringEmbed = true
+        return FloatArray(dimensions) { 0.1f }
+    }
+
+    override fun close() {
+        closeCalls++
+    }
+}

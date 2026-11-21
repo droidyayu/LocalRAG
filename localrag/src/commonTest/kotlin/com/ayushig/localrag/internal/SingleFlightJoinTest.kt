@@ -7,6 +7,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -76,5 +77,34 @@ class SingleFlightJoinTest {
         flight.run { events += "two" }
 
         assertEquals(listOf("one", "two"), events)
+    }
+
+    @Test
+    fun aThirdCallAlsoWaitsForTheFirstWhenTheSecondWasCancelledWhileWaiting() = runTest {
+        val flight = SingleFlight()
+        val events = mutableListOf<String>()
+
+        launch {
+            flight.run {
+                events += "start1"
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) {
+                        delay(500)
+                        events += "end1"
+                    }
+                }
+            }
+        }
+        advanceUntilIdle()
+        val second = launch { flight.run { events += "start2" } }
+        advanceTimeBy(100)
+        val third = launch { flight.run { events += "start3" } }
+        advanceUntilIdle()
+
+        assertEquals(listOf("start1", "end1", "start3"), events)
+        assertTrue(second.isCancelled)
+        assertTrue(third.isCompleted)
     }
 }

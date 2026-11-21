@@ -1,15 +1,20 @@
 package com.ayushig.localrag
 
+import com.ayushig.localrag.core.bundle.BundleReader
+import com.ayushig.localrag.core.bundle.EmbedderDescriptor
 import com.ayushig.localrag.internal.EngineSlot
 import com.ayushig.localrag.internal.SignatureVerifier
 import com.ayushig.localrag.testing.ControllableGenerationBackend
 import com.ayushig.localrag.testing.FakePlatform
 import com.ayushig.localrag.testing.NoEmbeddingBackend
+import com.ayushig.localrag.testing.ReentrantEmbeddingBackend
+import com.ayushig.localrag.testing.SdkTestBundle
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.async
@@ -175,5 +180,39 @@ class LocalRagConcurrencyTest {
         assertFalse(assertIs<LocalRagState.Ready>(rag.state.value).canGenerate)
         assertTrue(backend.loads.isEmpty())
         assertTrue(rag.retrieveOnly("brokerage").isNotEmpty())
+    }
+
+    @Test
+    fun anUnloadRequestedDuringRetrievalWaitsForTheQueryEmbedding() = runTest {
+        val manifestEmbedding = assertNotNull(BundleReader().read(SdkTestBundle.bytes()).manifest.embedding)
+        val descriptor = EmbedderDescriptor(
+            modelId = manifestEmbedding.modelId,
+            dimensions = manifestEmbedding.dimensions,
+            normalized = manifestEmbedding.normalized,
+            queryPrefix = manifestEmbedding.queryPrefix,
+            documentPrefix = manifestEmbedding.documentPrefix,
+        )
+        lateinit var rag: LocalRag
+        val embedding = ReentrantEmbeddingBackend { rag.unloadModels() }
+        rag = LocalRag(
+            platform = FakePlatform(),
+            config = config(model = null).copy(
+                embeddingModelPath = "/models/e.tflite",
+                embedder = descriptor,
+            ),
+            signatureVerifier = SignatureVerifier.RejectAll,
+            generationBackend = ControllableGenerationBackend(),
+            embeddingBackend = embedding,
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+        )
+        rag.initialize()
+        assertTrue(assertIs<LocalRagState.Ready>(rag.state.value).usingVectors)
+
+        rag.retrieveOnly("brokerage")
+        advanceUntilIdle()
+
+        assertFalse(embedding.engine.closedDuringEmbed, "the embedder must not close while a query is being embedded")
+        assertEquals(1, embedding.engine.closeCalls, "the requested unload must still happen afterwards")
+        assertFalse(assertIs<LocalRagState.Ready>(rag.state.value).usingVectors)
     }
 }
