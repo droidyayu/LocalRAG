@@ -1,7 +1,7 @@
 package com.ayushig.localrag.core.document
 
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.daysUntil
 
 data class ValidationConfig(
     val categories: List<String> = emptyList(),
@@ -57,7 +57,7 @@ class DocumentValidator(private val config: ValidationConfig) {
             if (reviewed == null) {
                 issues += error(document, "last_reviewed `${document.lastReviewed}` is not a date")
             } else {
-                val age = ChronoUnit.DAYS.between(reviewed, today)
+                val age = reviewed.daysUntil(today)
                 if (age > config.staleAfterDays) {
                     issues += error(
                         document,

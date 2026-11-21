@@ -1,6 +1,7 @@
 package com.ayushig.localrag.core.answer
 
 import com.ayushig.localrag.core.text.Tokenizer
+import kotlin.math.roundToInt
 
 /**
  * Decides whether generated text is allowed to reach the user.
@@ -78,7 +79,7 @@ object OutputGate {
         if (overlap < config.minimumOverlap) {
             return Verdict.Rejected(
                 Reason.LOW_OVERLAP,
-                "%.0f%% of terms appear in the passages".format(overlap * 100),
+                "${(overlap * 100).roundToInt()}% of terms appear in the passages",
             )
         }
 
