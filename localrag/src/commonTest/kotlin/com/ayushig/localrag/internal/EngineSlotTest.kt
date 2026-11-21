@@ -1,15 +1,14 @@
-package com.ayushig.localrag
+package com.ayushig.localrag.internal
 
-import com.ayushig.localrag.internal.EngineSlot
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The process-wide engine policy, without the native engine.
  *
- * The slot object is the whole policy: Generator only calls acquire and release, so asserting the
- * slot here asserts the refusal a second LocalRag instance meets on a real device.
+ * The slot object is the whole policy: the loader only calls acquire and release, so asserting
+ * the slot here asserts the refusal a second LocalRag instance meets on a real device.
  */
 class EngineSlotTest {
 

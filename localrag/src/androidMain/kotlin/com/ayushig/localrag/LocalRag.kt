@@ -6,8 +6,10 @@ import android.content.res.Configuration
 import android.util.Log
 import com.ayushig.localrag.internal.BundleLoader
 import com.ayushig.localrag.internal.AgentRunner
-import com.ayushig.localrag.internal.Generator
-import com.ayushig.localrag.internal.QueryEmbedder
+import com.ayushig.localrag.internal.EmbedderLoader
+import com.ayushig.localrag.internal.GenerationLoader
+import com.ayushig.localrag.internal.LiteRtEmbeddingBackend
+import com.ayushig.localrag.internal.LiteRtGenerationBackend
 import com.ayushig.localrag.internal.SingleFlight
 import com.ayushig.localrag.internal.Retriever
 import com.ayushig.localrag.internal.SignatureVerifier
@@ -32,6 +34,8 @@ class LocalRag private constructor(
     private val context: Context,
     private var config: Config,
     private val signatureVerifier: SignatureVerifier,
+    private val generationBackend: GenerationBackend = LiteRtGenerationBackend(),
+    private val embeddingBackend: EmbeddingBackend = LiteRtEmbeddingBackend(),
 ) {
 
     data class Config(
@@ -81,8 +85,8 @@ class LocalRag private constructor(
 
     private var bundle: Bundle? = null
     private var retriever: Retriever? = null
-    private var embedder: QueryEmbedder? = null
-    private var generator: Generator? = null
+    private var embedder: EmbeddingEngine? = null
+    private var generator: GenerationEngine? = null
 
     /**
      * The only shared mutable state in the SDK: which coroutine currently owns the engine.
@@ -151,7 +155,15 @@ class LocalRag private constructor(
         withContext(Dispatchers.IO) {
             flight.run {
                 AgentRunner().answer(
-                    generate = { prompt -> generator?.generate(prompt) },
+                    generate = { prompt ->
+                        generator?.generate(
+                            GenerationRequest(
+                                prompt,
+                                this@LocalRag.config.systemInstruction,
+                                this@LocalRag.config.maxOutputTokens,
+                            ),
+                        )
+                    },
                     query = query,
                     config = config,
                     history = history,
@@ -196,7 +208,7 @@ class LocalRag private constructor(
         this.config = config
     }
 
-    private fun createEmbedder(bundle: Bundle): QueryEmbedder? {
+    private fun createEmbedder(bundle: Bundle): EmbeddingEngine? {
         val modelPath = config.embeddingModelPath ?: return null
         val embedding = bundle.manifest.embedding ?: run {
             Log.w(TAG, "an embedding model is configured but the bundle carries no vectors")
@@ -210,7 +222,8 @@ class LocalRag private constructor(
             )
             return null
         }
-        return QueryEmbedder.createIfCompatible(
+        return EmbedderLoader.createIfCompatible(
+            backend = embeddingBackend,
             modelPath = modelPath,
             cacheDir = config.cacheDir.path,
             manifest = embedding,
@@ -218,14 +231,13 @@ class LocalRag private constructor(
         ) { reason -> Log.w(TAG, reason) }
     }
 
-    private suspend fun createGenerator(): Generator? {
+    private suspend fun createGenerator(): GenerationEngine? {
         val modelPath = config.generationModelPath ?: return null
-        return Generator.createOrNull(
+        return GenerationLoader.loadOrNull(
+            backend = generationBackend,
             modelPath = modelPath,
             cacheDir = config.cacheDir.path,
-            systemInstruction = config.systemInstruction,
-            maxOutputTokens = config.maxOutputTokens,
-            preferGpuBackend = config.preferGpuBackend,
+            preferGpu = config.preferGpuBackend,
         ) { reason -> Log.w(TAG, reason) }
     }
 
