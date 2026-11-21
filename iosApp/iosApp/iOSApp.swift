@@ -4,12 +4,12 @@ import Shared
 @main
 struct iOSApp: App {
     init() {
-        // Generation and embedding backends come from the Swift LiteRT-LM engine files (added
-        // next); nil keeps the app retrieval-only, which is a supported state.
+        // Generation runs on the Swift LiteRT-LM engine; the embedding backend stays nil
+        // (D4: iOS retrieval is BM25-only for now).
         _ = KoinIosKt.doInitKoinIos(
             litertlmVersion: "0.17.0",
             appVersion: "4.5",
-            generationBackend: nil,
+            generationBackend: LiteRtGenerationBackend(),
             embeddingBackend: nil
         )
     }
