@@ -34,3 +34,7 @@ maestro/report/
 
 # Kotlin Gradle plugin session data
 .kotlin/
+
+# iOS app: the Xcode project is generated from iosApp/project.yml (xcodegen generate)
+iosApp/iosApp.xcodeproj/
+iosApp/build/
