@@ -80,11 +80,15 @@ if [ "$QUICK" -eq 0 ]; then
     fi
 
     SDK_MODULE=":localrag-android"
-    [ -d localrag ] && SDK_MODULE=":localrag"
+    SDK_TASK="testDebugUnitTest"
+    if [ -d localrag ]; then
+        SDK_MODULE=":localrag"
+        SDK_TASK="allTests"
+    fi
     DEMO_MODULE=":app"
     [ -d androidApp ] && DEMO_MODULE=":androidApp"
 
-    step "sdk unit tests" $GRADLE "${SDK_MODULE}:testDebugUnitTest" --console=plain
+    step "sdk tests (android host + ios sim)" $GRADLE "${SDK_MODULE}:${SDK_TASK}" --console=plain
     step "demo unit tests" $GRADLE "${DEMO_MODULE}:testDebugUnitTest" --console=plain
     step "demo assembleDebug" $GRADLE "${DEMO_MODULE}:assembleDebug" --console=plain
     step "docs bundle builds" $GRADLE "${DEMO_MODULE}:generateLocalRagBundle" --console=plain

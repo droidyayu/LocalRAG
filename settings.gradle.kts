@@ -30,5 +30,5 @@ rootProject.name = "LocalRAG"
 includeBuild("localrag-tooling")
 
 include(":app")
-include(":localrag-android")
+include(":localrag")
  
