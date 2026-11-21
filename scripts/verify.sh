@@ -69,7 +69,7 @@ skip() {
     rows+=("| $1 | SKIPPED | $2 |")
 }
 
-step "core tests (jvm)" $GRADLE -p localrag-tooling :localrag-core:test --console=plain
+step "core tests (jvm)" $GRADLE -p localrag-tooling :localrag-core:jvmTest --console=plain
 step "core stays platform-free" $GRADLE -p localrag-tooling :localrag-core:verifyNoPlatformDependencies --console=plain
 
 if [ "$QUICK" -eq 0 ]; then
