@@ -102,7 +102,7 @@ class ScriptedModelTest {
     @Test
     fun anAdviceQuestionGetsTheRefusalLine() {
         assertEquals(
-            "ANSWER: I can't advise on buying or selling.",
+            "ANSWER: You should buy more stocks.",
             ScriptedModel.reply(prompt("Should I buy more stocks?")),
         )
     }
@@ -153,7 +153,7 @@ class ScriptedModelTest {
     @Test
     fun anAdviceQuestionStillGetsTheRefusalWhenDocumentationWasPreSearched() {
         assertEquals(
-            "ANSWER: I can't advise on buying or selling.",
+            "ANSWER: You should buy more stocks.",
             ScriptedModel.reply(prompt("Should I buy more stocks?", unrelatedDocs)),
         )
     }

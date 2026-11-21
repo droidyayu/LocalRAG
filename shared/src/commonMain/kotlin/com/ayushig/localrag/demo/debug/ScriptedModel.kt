@@ -149,7 +149,11 @@ object ScriptedModel {
 
     private val DOCS_CUTS = listOf("\n---\n", "\n$TOOL_MARKER")
 
-    private const val ADVICE_REFUSAL = "ANSWER: I can't advise on buying or selling."
+    /**
+     * Plays the model that gives advice anyway: the output gate rejects advisory language and the
+     * app answers with its own fixed refusal ("... I can't advise on buying or selling").
+     */
+    private const val ADVICE_REFUSAL = "ANSWER: You should buy more stocks."
     private const val GREETING = "ANSWER: Hello! I can help with your portfolio and the help documentation."
 
     /**
