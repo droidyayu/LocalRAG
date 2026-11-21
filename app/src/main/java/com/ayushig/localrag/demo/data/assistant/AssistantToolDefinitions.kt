@@ -1,7 +1,7 @@
 package com.ayushig.localrag.demo.data.assistant
 
-import com.ayushig.localrag.android.ToolDefinition
-import com.ayushig.localrag.android.ToolResult
+import com.ayushig.localrag.ToolDefinition
+import com.ayushig.localrag.ToolResult
 import com.ayushig.localrag.demo.core.Formatters
 import com.ayushig.localrag.demo.data.portfolio.PortfolioCalculations
 import com.ayushig.localrag.demo.domain.model.portfolio.AssetCategory

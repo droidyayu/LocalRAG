@@ -1,6 +1,6 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
-import com.ayushig.localrag.android.internal.EngineSlot
+import com.ayushig.localrag.internal.EngineSlot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -9,7 +9,7 @@ version = "0.1.0"
 
 kotlin {
     androidLibrary {
-        namespace = "com.ayushig.localrag.android"
+        namespace = "com.ayushig.localrag"
         compileSdk = 37
         minSdk = 26
 

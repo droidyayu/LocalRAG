@@ -1,7 +1,7 @@
 package com.ayushig.localrag.demo.data
 
 import android.content.Context
-import com.ayushig.localrag.android.LocalRag
+import com.ayushig.localrag.LocalRag
 import com.ayushig.localrag.demo.domain.model.ModelOption
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject

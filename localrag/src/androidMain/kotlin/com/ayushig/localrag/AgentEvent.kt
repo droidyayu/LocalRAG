@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
 /**
  * Progress signals from an agent turn, for hosts that want to show what the assistant is

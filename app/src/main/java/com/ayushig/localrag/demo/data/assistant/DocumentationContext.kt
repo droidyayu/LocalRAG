@@ -1,6 +1,6 @@
 package com.ayushig.localrag.demo.data.assistant
 
-import com.ayushig.localrag.android.Passage
+import com.ayushig.localrag.Passage
 
 /**
  * Documentation the app pre-searches for each question, replacing the old

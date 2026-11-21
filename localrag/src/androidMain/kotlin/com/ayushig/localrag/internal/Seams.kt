@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 /**
  * The model-backed query capability, behind an interface so retrieval degrades to BM25 when no

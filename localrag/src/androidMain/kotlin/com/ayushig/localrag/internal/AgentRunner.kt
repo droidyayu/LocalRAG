@@ -1,13 +1,13 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 import android.util.Log
-import com.ayushig.localrag.android.AgentConfig
-import com.ayushig.localrag.android.AgentEvent
-import com.ayushig.localrag.android.AgentMessage
-import com.ayushig.localrag.android.AgentOutcome
-import com.ayushig.localrag.android.AgentRole
-import com.ayushig.localrag.android.AgentTimings
-import com.ayushig.localrag.android.Passage
+import com.ayushig.localrag.AgentConfig
+import com.ayushig.localrag.AgentEvent
+import com.ayushig.localrag.AgentMessage
+import com.ayushig.localrag.AgentOutcome
+import com.ayushig.localrag.AgentRole
+import com.ayushig.localrag.AgentTimings
+import com.ayushig.localrag.Passage
 import com.ayushig.localrag.core.answer.OutputGate
 
 /**
@@ -249,7 +249,7 @@ internal class AgentRunner {
 
     private fun StringBuilder.observe(
         call: AgentProtocol.Parsed.ToolCall,
-        observation: com.ayushig.localrag.android.ToolResult,
+        observation: com.ayushig.localrag.ToolResult,
     ) {
         append("TOOL: ${call.name}\n")
         append("OBSERVATION [${observation.tool}]:\n${observation.text}\n")

@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 import java.util.concurrent.atomic.AtomicBoolean
 

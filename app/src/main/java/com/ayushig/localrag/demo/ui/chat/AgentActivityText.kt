@@ -1,6 +1,6 @@
 package com.ayushig.localrag.demo.ui.chat
 
-import com.ayushig.localrag.android.AgentEvent
+import com.ayushig.localrag.AgentEvent
 import com.ayushig.localrag.demo.domain.model.TurnTimings
 
 /** The one-line status shown with the assistant bubble while a turn runs. Pure, tested. */

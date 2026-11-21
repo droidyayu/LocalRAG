@@ -1,7 +1,7 @@
 package com.ayushig.localrag.demo.di
 
-import com.ayushig.localrag.android.AgentConfig
-import com.ayushig.localrag.android.LocalRag
+import com.ayushig.localrag.AgentConfig
+import com.ayushig.localrag.LocalRag
 import com.ayushig.localrag.demo.data.assistant.AGENT_SYSTEM_PROMPT
 import com.ayushig.localrag.demo.data.assistant.AssistantToolDefinitions
 import com.ayushig.localrag.demo.data.assistant.DocumentationContext

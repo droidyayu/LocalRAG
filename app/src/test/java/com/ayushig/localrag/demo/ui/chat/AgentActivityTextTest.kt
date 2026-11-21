@@ -1,6 +1,6 @@
 package com.ayushig.localrag.demo.ui.chat
 
-import com.ayushig.localrag.android.AgentEvent
+import com.ayushig.localrag.AgentEvent
 import com.ayushig.localrag.demo.domain.model.TurnTimings
 import org.junit.Assert.assertEquals
 import org.junit.Test
