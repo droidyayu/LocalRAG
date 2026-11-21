@@ -8,6 +8,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import platform.Foundation.NSData
+import platform.Foundation.create
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
@@ -70,12 +74,9 @@ class IosPlatformServicesTest {
         NSFileManager.defaultManager.createFileAtPath(files.pathFor(ModelOption.GEMMA_270M), contents = null, attributes = null)
         assertFalse(files.isPresent(ModelOption.GEMMA_270M))
 
-        platform.Foundation.NSString.create(string = "x").writeToFile(
-            files.pathFor(ModelOption.GEMMA_270M),
-            atomically = true,
-            encoding = platform.Foundation.NSUTF8StringEncoding,
-            error = null,
-        )
+        val bytes = "x".encodeToByteArray()
+        val data = bytes.usePinned { pinned -> NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong()) }
+        NSFileManager.defaultManager.createFileAtPath(files.pathFor(ModelOption.GEMMA_270M), contents = data, attributes = null)
         assertTrue(files.isPresent(ModelOption.GEMMA_270M))
         assertEquals(setOf(ModelOption.GEMMA_270M), files.present())
     }
