@@ -31,3 +31,6 @@ maestro/report/
 # Project-local Python environments (tools/*/README tells which to create).
 **/.venv/
 **/__pycache__/
+
+# Kotlin Gradle plugin session data
+.kotlin/
