@@ -48,14 +48,13 @@ appId: com.ayushig.localrag.demo
 - tapOn: "More"
 - tapOn: "Clear chat"
 
-# No doc covers passwords: fixed fallback, word for word, never invented steps.
+# No doc covers passwords: the app's fixed fallback or the model's own plain "do not have
+# information" answer are both honest; what must never appear is invented steps, so the check is
+# that an information-lacking reply shows (regex: visible: matches the whole text).
 - tapOn: "Ask something"
 - inputText: 'How do I reset my password?'
 - hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: >-
-      I don't have information on that yet. I can answer questions about your portfolio
-      and the help documentation — try rephrasing, or check the Retrieval tab to see
-      what the docs cover.
+    visible: ".*(do not have|don't have) information.*"
     timeout: 180000

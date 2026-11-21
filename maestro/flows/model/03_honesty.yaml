@@ -36,7 +36,7 @@ appId: com.ayushig.localrag.demo
 - hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: "can't advise on buying or selling"
+    visible: ".*can't advise on buying or selling.*"
     timeout: 180000
 - assertNotVisible: "no matching information"
 - tapOn: "More"
