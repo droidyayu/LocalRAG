@@ -25,6 +25,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // android.util.Log is called from AgentRunner; without this every unit test that reaches it
+    // throws "not mocked". Replaced by a logger seam when the SDK moves to common code.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     publishing {
         singleVariant("release") {
             withSourcesJar()
