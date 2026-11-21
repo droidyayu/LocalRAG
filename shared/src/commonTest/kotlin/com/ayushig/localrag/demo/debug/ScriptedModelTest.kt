@@ -120,4 +120,48 @@ class ScriptedModelTest {
     fun theProbeAsksForExactlyOk() {
         assertEquals("OK", ScriptedModel.reply("ping", systemInstruction = "Reply with exactly: OK"))
     }
+
+    // The app pre-searches documentation for EVERY question, so a docs block is present even for
+    // portfolio questions; the scripted model must decide by the question, not by the block.
+    private val unrelatedDocs =
+        "Managed portfolios — overview\nYou can add at any time. Withdrawals settle after the portfolio rebalances."
+
+    @Test
+    fun aPortfolioQuestionStillCallsTheToolWhenDocumentationWasPreSearched() {
+        assertEquals(
+            "TOOL: get_portfolio_summary",
+            ScriptedModel.reply(prompt("What is my portfolio worth?", unrelatedDocs)),
+        )
+    }
+
+    @Test
+    fun aGreetingGetsTheGreetingEvenWhenDocumentationWasPreSearched() {
+        val reply = ScriptedModel.reply(prompt("Hello", unrelatedDocs))
+
+        assertTrue(reply.startsWith("ANSWER: Hello!"), reply)
+    }
+
+    @Test
+    fun aPasswordQuestionGetsTheGateRefusedAnswerEvenWhenDocumentationWasPreSearched() {
+        val reply = ScriptedModel.reply(prompt("How do I reset my password?", unrelatedDocs))
+
+        assertTrue(reply.startsWith("ANSWER: "), reply)
+        assertTrue(reply.any(Char::isDigit), "the answer carries an unsupported figure so the gate rejects it")
+        assertTrue(!reply.contains("add at any time"), reply)
+    }
+
+    @Test
+    fun anAdviceQuestionStillGetsTheRefusalWhenDocumentationWasPreSearched() {
+        assertEquals(
+            "ANSWER: I can't advise on buying or selling.",
+            ScriptedModel.reply(prompt("Should I buy more stocks?", unrelatedDocs)),
+        )
+    }
+
+    @Test
+    fun aDocumentationQuestionStillAnswersFromTheFirstPassageAfterTheReorder() {
+        val reply = ScriptedModel.reply(prompt("What are the brokerage charges?", "Brokerage charges — overview\nBrokerage is 0.03 percent per order."))
+
+        assertEquals("ANSWER: Brokerage is 0.03 percent per order.", reply)
+    }
 }
