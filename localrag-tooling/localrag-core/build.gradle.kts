@@ -39,7 +39,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(libs.kotlinx.serialization.json)
-            implementation(libs.kotlinx.datetime)
+            // Both appear in public signatures (DocumentValidator.today, BundleReader paths).
+            api(libs.kotlinx.datetime)
+            api(libs.okio)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
