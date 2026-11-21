@@ -33,8 +33,10 @@ object ScriptedModel {
             tail.substring(markerAt + QUESTION_MARKER.length).substringBefore("\n").trim()
         }
 
+        // Decide by the question, not by the pre-searched block: the app pre-searches
+        // documentation for EVERY question, so a docs block is present even when it is
+        // irrelevant. Only an observation (fresh tool evidence) outranks the question.
         observationText(beforeQuestion)?.let { return "ANSWER: $it" }
-        documentationText(beforeQuestion)?.let { return "ANSWER: $it" }
 
         val q = question.lowercase()
         if (q.contains("should i buy") || q.contains("should i sell") || q.contains("should i hold")) {
@@ -51,6 +53,9 @@ object ScriptedModel {
             if (q.contains("find")) return "TOOL: find_holding"
         }
         if (isGreeting(q)) return GREETING
+        // The known uncovered topic of this corpus: refuse with an unsupported figure.
+        if (q.contains("password")) return NO_EVIDENCE_FALLBACK
+        documentationText(beforeQuestion)?.let { return "ANSWER: $it" }
         return NO_EVIDENCE_FALLBACK
     }
 
