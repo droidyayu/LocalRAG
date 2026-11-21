@@ -4,7 +4,7 @@ import com.ayushig.localrag.core.document.DocumentStatus
 import com.ayushig.localrag.core.document.DocumentValidator
 import com.ayushig.localrag.core.document.ParsedDocument
 import com.ayushig.localrag.core.document.ValidationConfig
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

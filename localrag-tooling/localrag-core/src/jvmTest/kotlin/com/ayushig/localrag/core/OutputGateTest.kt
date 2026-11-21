@@ -129,6 +129,33 @@ class OutputGateTest {
     }
 
     @Test
+    fun `low overlap detail reports the rounded share`() {
+        val config = OutputGate.Config(minimumOverlap = 0.5f)
+
+        val forty = assertIs<OutputGate.Verdict.Rejected>(
+            OutputGate.check("Alpha beta zeta eta theta.", listOf("alpha beta gamma"), config),
+        )
+        assertEquals(OutputGate.Reason.LOW_OVERLAP, forty.reason)
+        assertEquals("40% of terms appear in the passages", forty.detail)
+
+        val eighth = assertIs<OutputGate.Verdict.Rejected>(
+            OutputGate.check(
+                "Alpha zeta eta theta kappa lambda mu nu.",
+                listOf("alpha"),
+                config,
+            ),
+        )
+        assertEquals(OutputGate.Reason.LOW_OVERLAP, eighth.reason)
+        assertEquals("13% of terms appear in the passages", eighth.detail)
+
+        val none = assertIs<OutputGate.Verdict.Rejected>(
+            OutputGate.check("Zeta eta theta kappa.", listOf("alpha"), config),
+        )
+        assertEquals(OutputGate.Reason.LOW_OVERLAP, none.reason)
+        assertEquals("0% of terms appear in the passages", none.detail)
+    }
+
+    @Test
     fun `a question mark still counts as a finished sentence`() {
         assertEquals(
             OutputGate.Verdict.Allowed,
