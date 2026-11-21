@@ -23,7 +23,7 @@ class DocumentValidatorDatesTest {
     )
 
     @Test
-    fun `an impossible or malformed date is reported, not thrown`() {
+    fun `an impossible or malformed date is reported and not thrown`() {
         for (bad in listOf("2026-13-45", "not-a-date", "2026-02-30", "")) {
             val issue = validator.validate(listOf(document(bad)), today).single()
             assertTrue(issue.message.contains("is not a date"), "$bad -> ${issue.message}")
