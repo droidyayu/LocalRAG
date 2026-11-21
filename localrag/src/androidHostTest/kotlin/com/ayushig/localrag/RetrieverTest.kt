@@ -1,6 +1,6 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
-import com.ayushig.localrag.android.internal.Retriever
+import com.ayushig.localrag.internal.Retriever
 import com.ayushig.localrag.core.bundle.Bundle
 import com.ayushig.localrag.core.bundle.BundleManifest
 import com.ayushig.localrag.core.bundle.Bm25Params

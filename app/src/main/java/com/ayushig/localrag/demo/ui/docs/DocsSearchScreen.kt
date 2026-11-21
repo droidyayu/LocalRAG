@@ -25,8 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ayushig.localrag.android.LocalRagState
-import com.ayushig.localrag.android.Passage
+import com.ayushig.localrag.LocalRagState
+import com.ayushig.localrag.Passage
 
 @Composable
 fun DocsSearchRoute(

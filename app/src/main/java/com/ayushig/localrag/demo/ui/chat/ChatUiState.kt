@@ -1,7 +1,7 @@
 package com.ayushig.localrag.demo.ui.chat
 
 import androidx.compose.runtime.Immutable
-import com.ayushig.localrag.android.LocalRagState
+import com.ayushig.localrag.LocalRagState
 import com.ayushig.localrag.demo.domain.model.ChatMessage
 import com.ayushig.localrag.demo.domain.model.ModelOption
 

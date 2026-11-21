@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend

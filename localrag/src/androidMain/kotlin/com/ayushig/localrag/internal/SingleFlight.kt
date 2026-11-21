@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.FlowCollector

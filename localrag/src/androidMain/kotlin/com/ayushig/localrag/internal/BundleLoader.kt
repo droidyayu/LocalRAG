@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 import android.content.Context
 import com.ayushig.localrag.core.bundle.Bundle

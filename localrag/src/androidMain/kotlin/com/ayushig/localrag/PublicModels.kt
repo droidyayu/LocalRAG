@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
 /** Where a passage came from in the retrieval pipeline. */
 enum class MatchSource { BM25, VECTOR, HYBRID, PRECOMPUTED }

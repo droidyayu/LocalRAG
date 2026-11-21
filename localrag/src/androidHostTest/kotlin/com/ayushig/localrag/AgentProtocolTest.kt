@@ -1,8 +1,8 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
-import com.ayushig.localrag.android.internal.AgentProtocol
-import com.ayushig.localrag.android.internal.AgentProtocol.Parsed.FinalAnswer
-import com.ayushig.localrag.android.internal.AgentProtocol.Parsed.ToolCall
+import com.ayushig.localrag.internal.AgentProtocol
+import com.ayushig.localrag.internal.AgentProtocol.Parsed.FinalAnswer
+import com.ayushig.localrag.internal.AgentProtocol.Parsed.ToolCall
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

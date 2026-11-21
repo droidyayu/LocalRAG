@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 import com.ayushig.localrag.core.bundle.EmbedderDescriptor
 import com.ayushig.localrag.core.bundle.EmbeddingInfo

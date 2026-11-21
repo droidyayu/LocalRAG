@@ -1,4 +1,4 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
 /**
  * The strict grammar between the loop and the model. Greedy decoding plus the host app's

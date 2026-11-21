@@ -1,6 +1,6 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
-import com.ayushig.localrag.android.internal.AgentRunner
+import com.ayushig.localrag.internal.AgentRunner
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

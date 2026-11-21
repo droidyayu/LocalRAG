@@ -1,16 +1,16 @@
-package com.ayushig.localrag.android
+package com.ayushig.localrag
 
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
-import com.ayushig.localrag.android.internal.BundleLoader
-import com.ayushig.localrag.android.internal.AgentRunner
-import com.ayushig.localrag.android.internal.Generator
-import com.ayushig.localrag.android.internal.QueryEmbedder
-import com.ayushig.localrag.android.internal.SingleFlight
-import com.ayushig.localrag.android.internal.Retriever
-import com.ayushig.localrag.android.internal.SignatureVerifier
+import com.ayushig.localrag.internal.BundleLoader
+import com.ayushig.localrag.internal.AgentRunner
+import com.ayushig.localrag.internal.Generator
+import com.ayushig.localrag.internal.QueryEmbedder
+import com.ayushig.localrag.internal.SingleFlight
+import com.ayushig.localrag.internal.Retriever
+import com.ayushig.localrag.internal.SignatureVerifier
 import com.ayushig.localrag.core.bundle.Bundle
 import com.ayushig.localrag.core.bundle.EmbedderDescriptor
 import com.ayushig.localrag.core.index.VectorIndex

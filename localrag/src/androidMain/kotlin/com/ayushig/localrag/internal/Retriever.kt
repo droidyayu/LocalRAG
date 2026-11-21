@@ -1,7 +1,7 @@
-package com.ayushig.localrag.android.internal
+package com.ayushig.localrag.internal
 
-import com.ayushig.localrag.android.MatchSource
-import com.ayushig.localrag.android.Passage
+import com.ayushig.localrag.MatchSource
+import com.ayushig.localrag.Passage
 import com.ayushig.localrag.core.bundle.Bundle
 import com.ayushig.localrag.core.index.ReciprocalRankFusion
 import com.ayushig.localrag.core.index.ScoredChunk

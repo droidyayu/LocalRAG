@@ -1,7 +1,7 @@
 package com.ayushig.localrag.demo.assistant
 
-import com.ayushig.localrag.android.MatchSource
-import com.ayushig.localrag.android.Passage
+import com.ayushig.localrag.MatchSource
+import com.ayushig.localrag.Passage
 import com.ayushig.localrag.demo.data.assistant.DocumentationContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

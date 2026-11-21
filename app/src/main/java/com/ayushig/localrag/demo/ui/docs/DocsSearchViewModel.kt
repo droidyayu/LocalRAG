@@ -3,9 +3,9 @@ package com.ayushig.localrag.demo.ui.docs
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ayushig.localrag.android.LocalRag
-import com.ayushig.localrag.android.LocalRagState
-import com.ayushig.localrag.android.Passage
+import com.ayushig.localrag.LocalRag
+import com.ayushig.localrag.LocalRagState
+import com.ayushig.localrag.Passage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
