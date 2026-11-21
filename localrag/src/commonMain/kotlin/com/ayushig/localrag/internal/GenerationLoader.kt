@@ -7,6 +7,10 @@ import com.ayushig.localrag.GenerationRequest
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 
 /**
  * The load policy shared by every platform: GPU first when asked, a tiny probe that must read
@@ -125,7 +129,16 @@ internal object GenerationLoader {
     private class LoadedEngine(private val inner: GenerationEngine) : GenerationEngine {
         private val closed = AtomicBoolean(false)
 
-        override suspend fun generate(request: GenerationRequest): String? = inner.generate(request)
+        override suspend fun generate(request: GenerationRequest): String? = coroutineScope {
+            val call = async { inner.generate(request) }
+            try {
+                call.await()
+            } catch (cancelled: CancellationException) {
+                runCatching { inner.cancelGeneration() }
+                withContext(NonCancellable) { call.join() }
+                throw cancelled
+            }
+        }
 
         override fun close() {
             if (closed.compareAndSet(false, true)) {
