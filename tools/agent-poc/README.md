@@ -30,7 +30,7 @@ call, greedy sampling). Desktop CPU runs a turn in seconds; the model echoes `OB
 blocks inside its own replies sometimes — harmless, the loop only ever reads the first
 line for directives.
 
-- `sizes`: BM25 over the real `app/src/main/docs`, then the round-0 prompt size
+- `sizes`: BM25 over the real `androidApp/src/main/docs`, then the round-0 prompt size
   plus per-round projections. A/B context levers with `--top-k`,
   `--max-obs-chars N`, and `--prompt-file variant.txt`.
 - `demo`: three scripted turns against the worked-example figures — verbatim

@@ -8,7 +8,7 @@
 # Prerequisites (checked below, not installed here):
 #   - Maestro CLI on PATH  (https://maestro.dev — `brew install maestro`)
 #   - adb on PATH with exactly one device attached
-#   - the demo app installed (`./gradlew :app:installDebug`)
+#   - the demo app installed (`./gradlew :androidApp:installDebug`)
 #   - the Gemma model file already pushed to the device
 #
 # Output: ./maestro/report/<timestamp>/REPORT.md plus per-flow logs,
@@ -33,7 +33,7 @@ command -v maestro >/dev/null || fail "maestro not on PATH (brew install maestro
 command -v adb >/dev/null || fail "adb not on PATH"
 [ "$(adb devices | grep -c -w device)" -ge 1 ] || fail "no adb device attached"
 adb shell cmd package list packages | grep -q "$APP_ID" \
-    || fail "$APP_ID not installed (./gradlew :app:installDebug)"
+    || fail "$APP_ID not installed (./gradlew :androidApp:installDebug)"
 
 mkdir -p "$REPORT_DIR/screenshots" "$REPORT_DIR/flows"
 # Maestro does not interpolate ${READY_LABEL} inside command arguments (it waits on

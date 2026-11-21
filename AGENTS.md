@@ -116,8 +116,8 @@ promote noise.
 ## Build
 
 ```bash
-./gradlew :app:assembleDebug            # builds core, plugin, bundle and app in one invocation
-./gradlew :app:generateLocalRagBundle   # bundle only
+./gradlew :androidApp:assembleDebug            # builds core, plugin, bundle and app in one invocation
+./gradlew :androidApp:generateLocalRagBundle   # bundle only
 ./gradlew -p localrag-tooling :localrag-core:test
 ./gradlew :localrag-android:testDebugUnitTest
 ./gradlew publishToMavenLocal           # plus -p localrag-tooling for core and the plugin

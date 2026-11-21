@@ -48,7 +48,7 @@ app** (`:app`), which is the library's first consumer:
   running and expandable function/document details afterwards; anything unanswerable meets
   a fixed fallback, never a guess.
 - Documentation search screen driving the library's `retrieveOnly`, plus a Markdown corpus in
-  `app/src/main/docs` that the Gradle plugin indexes into the app bundle at build time.
+  `androidApp/src/main/docs` that the Gradle plugin indexes into the app bundle at build time.
 
 The app follows the layer structure below, except it uses `ui/` rather than `presentation/`.
 
@@ -114,7 +114,7 @@ titles the answer was built from, and the chat screen renders them as expandable
   on device
 - Vector store — brute-force dot product over normalized vectors in `localrag-core`, no database
 - Generation runs fully on-device; retrieved context never leaves the phone
-- The knowledge corpus lives in the host app (`app/src/main/docs`) and is indexed by the
+- The knowledge corpus lives in the host app (`androidApp/src/main/docs`) and is indexed by the
   `com.ayushig.localrag` Gradle plugin into `assets/localrag/docs.localrag` at build time
 
 ## Tech stack
@@ -143,7 +143,7 @@ Or open the project in Android Studio and run the `app` configuration.
 ## Verifying the assistant
 
 ```bash
-./gradlew :app:generateLocalRagBundle   # rebuild the docs bundle only
+./gradlew :androidApp:generateLocalRagBundle   # rebuild the docs bundle only
 python3 tools/agent-poc/agent_poc.py demo   # gate + sizes, no device needed
 ./maestro/run_assistant_tests.sh        # on-device Q&A suite (model must be pushed);
                                         # writes maestro/report/ with screenshots + logcat
@@ -154,7 +154,7 @@ python3 tools/agent-poc/agent_poc.py demo   # gate + sizes, no device needed
 What exists on disk today. The library modules are documented in `AGENTS.md`.
 
 ```
-app/src/main/java/com/ayushig/localrag/demo/
+androidApp/src/main/java/com/ayushig/localrag/demo/
 ├── core/                    # shared formatting (figures are rendered, never generated)
 ├── domain/                  # entities, repository interfaces, assistant models — no Android imports
 │   ├── assistant/           # fixed fallback copy
@@ -170,8 +170,8 @@ app/src/main/java/com/ayushig/localrag/demo/
     ├── chat/                # assistant surface: working card, turn details, suggestions
     ├── docs/                # documentation search over retrieveOnly()
     └── portfolio/           # home + category detail screens
-app/src/main/docs/           # Markdown corpus indexed by the plugin at build time
-app/src/main/localrag-clusters.json  # precomputed answers, written into the bundle
+androidApp/src/main/docs/           # Markdown corpus indexed by the plugin at build time
+androidApp/src/main/localrag-clusters.json  # precomputed answers, written into the bundle
 ```
 
 ## Conventions

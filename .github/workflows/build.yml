@@ -23,7 +23,7 @@ jobs:
       - name: Unit tests
         run: |
           ./gradlew -p localrag-tooling :localrag-core:jvmTest
-          ./gradlew :localrag:allTests :app:testDebugUnitTest
+          ./gradlew :localrag:allTests :androidApp:testDebugUnitTest
 
       - name: Assemble
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :androidApp:assembleDebug
