@@ -23,6 +23,15 @@ interface GenerationEngine {
     /** Null on any failure so the caller falls back instead of erroring. */
     suspend fun generate(request: GenerationRequest): String?
 
+    /**
+     * Stops the generation in progress as soon as possible, so its [generate] call returns soon.
+     * Safe to call from any thread, when nothing is running, and more than once. Engines whose
+     * [generate] already reacts to coroutine cancellation (Android) keep the default no-op; an
+     * engine implemented in Swift, whose suspend calls cannot observe Kotlin cancellation, must
+     * implement it (cancel its current Task).
+     */
+    fun cancelGeneration() {}
+
     fun close()
 }
 
