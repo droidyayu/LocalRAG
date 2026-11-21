@@ -21,6 +21,12 @@ targets:
     platform: iOS
     sources:
       - path: iosApp
+      # The docs bundle built by the LocalRAG Gradle plugin (same bytes as on Android), bundled as
+      # the folder "localrag/" so the SDK finds "localrag/docs.localrag" in the app bundle.
+      - path: ../androidApp/build/localrag/assets/localrag
+        type: folder
+        buildPhase: resources
+        optional: true
     dependencies:
       - package: LiteRTLM
         product: LiteRTLM
@@ -40,5 +46,5 @@ targets:
           export PATH="/opt/homebrew/bin:$PATH"
           export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home}"
           GRADLE="$(command -v gradle || echo ./gradlew)"
-          "$GRADLE" :shared:embedAndSignAppleFrameworkForXcode
+          "$GRADLE" :androidApp:generateLocalRagBundle :shared:embedAndSignAppleFrameworkForXcode
         basedOnDependencyAnalysis: false
