@@ -1,0 +1,10 @@
+# Shared subflow: open the Assistant tab and wait for the engine chip.
+#
+# The scripted lane always builds without embeddings, so the chip is fixed.
+
+appId: com.ayushig.localrag.demo
+---
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: "ready · bm25"
+    timeout: 120000

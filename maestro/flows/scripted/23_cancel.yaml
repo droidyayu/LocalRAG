@@ -1,0 +1,31 @@
+# Scripted lane: cancellation drill with the slow scripted engine.
+#
+# Each model call waits 6 s, so Stop lands mid-turn. The second answer must
+# still arrive with its source label: the first turn died cleanly and the
+# engine is not stuck.
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted_slow.yaml
+- runFlow:
+    file: ../common/open_assistant.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "What is my portfolio worth?"
+- tapOn: "Stop"
+- extendedWaitUntil:
+    notVisible: "Thinking…"
+    timeout: 60000
+- runFlow:
+    file: ../common/clear_chat.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "What is my portfolio worth?"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 60000

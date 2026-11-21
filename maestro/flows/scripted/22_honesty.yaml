@@ -1,0 +1,36 @@
+# Scripted lane: honesty paths.
+#
+# Greetings carry no tools and no sources: the turn is over when the working
+# status is gone, and the check is that no source label and no fallback
+# appeared. Advice is refused: assert the stable core "can't advise".
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- runFlow:
+    file: ../common/open_assistant.yaml
+
+# Small talk: answered, not labelled, not a fallback.
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "Hi"
+- extendedWaitUntil:
+    notVisible: "Thinking…"
+    timeout: 60000
+- assertNotVisible: "no matching information"
+- assertNotVisible: "from your account"
+- assertNotVisible: "from the help documentation"
+- runFlow:
+    file: ../common/clear_chat.yaml
+
+# Advice is refused, never softened or answered.
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "Should I buy more stocks?"
+- extendedWaitUntil:
+    visible: ".*can't advise.*"
+    timeout: 60000
+- assertNotVisible: "no matching information"

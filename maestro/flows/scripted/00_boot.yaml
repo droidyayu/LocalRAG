@@ -1,0 +1,16 @@
+# Scripted lane: boot, engine chip, and the bundled corpus line.
+#
+# Proves the real bundle loaded (53 chunks, content v1) behind the real UI;
+# only the model is scripted.
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- runFlow:
+    file: ../common/open_assistant.yaml
+- tapOn: "Retrieval"
+- extendedWaitUntil:
+    visible: ".*53 chunks.*"
+    timeout: 60000
+- assertVisible: ".*content v1.*"

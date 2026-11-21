@@ -20,7 +20,7 @@ appId: com.ayushig.localrag.demo
 # Total value and P&L.
 - tapOn: "Ask something"
 - inputText: 'What is my portfolio worth?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from your account"
@@ -31,7 +31,7 @@ appId: com.ayushig.localrag.demo
 # Category rollup.
 - tapOn: "Ask something"
 - inputText: 'How are my metals doing?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from your account"
@@ -42,7 +42,7 @@ appId: com.ayushig.localrag.demo
 # Margin figures.
 - tapOn: "Ask something"
 - inputText: 'What is my margin status?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from your account"
@@ -53,7 +53,7 @@ appId: com.ayushig.localrag.demo
 # Single-holding lookup by metal name.
 - tapOn: "Ask something"
 - inputText: 'Do I hold any gold?'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "from your account"
@@ -64,7 +64,7 @@ appId: com.ayushig.localrag.demo
 # Lookup with no name must not guess: fixed fallback, word for word.
 - tapOn: "Ask something"
 - inputText: 'Find my holding'
-- back # dismiss the keyboard: it covers Send
+- hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: >-

@@ -1,0 +1,32 @@
+# Scripted lane: relaunch without clearState keeps the app usable.
+#
+# Selecting a different model in the overflow menu is not testable without
+# model files, so this flow covers the relaunch half instead: ask, stop the
+# app, launch again with the same argument and NO clearState, and reach the
+# ready chip again.
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- runFlow:
+    file: ../common/open_assistant.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "What is my portfolio worth?"
+- extendedWaitUntil:
+    visible: "from your account"
+    timeout: 60000
+
+- stopApp
+- launchApp:
+    appId: com.ayushig.localrag.demo
+    arguments:
+      localrag.engine: scripted
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: "ready · bm25"
+    timeout: 120000
+- assertVisible: "Ask something"

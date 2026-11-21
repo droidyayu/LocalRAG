@@ -1,0 +1,54 @@
+# Scripted lane: documentation questions are grounded by the search tool.
+#
+# "from the help documentation" proves the docs search grounded the turn.
+# The password question is uncovered by the corpus: fixed fallback, word for
+# word, never invented steps.
+
+appId: com.ayushig.localrag.demo
+---
+- runFlow:
+    file: ../common/launch_scripted.yaml
+- runFlow:
+    file: ../common/open_assistant.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "How do I deposit funds?"
+- extendedWaitUntil:
+    visible: "from the help documentation"
+    timeout: 60000
+- runFlow:
+    file: ../common/clear_chat.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "What are the brokerage charges?"
+- extendedWaitUntil:
+    visible: "from the help documentation"
+    timeout: 60000
+- runFlow:
+    file: ../common/clear_chat.yaml
+
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "How do I close my account?"
+- extendedWaitUntil:
+    visible: "from the help documentation"
+    timeout: 60000
+- runFlow:
+    file: ../common/clear_chat.yaml
+
+# No doc covers passwords: fixed fallback, word for word.
+- runFlow:
+    file: ../common/ask.yaml
+    env:
+      QUESTION: "How do I reset my password?"
+- extendedWaitUntil:
+    visible: >-
+      I don't have information on that yet. I can answer questions about your portfolio
+      and the help documentation — try rephrasing, or check the Retrieval tab to see
+      what the docs cover.
+    timeout: 60000

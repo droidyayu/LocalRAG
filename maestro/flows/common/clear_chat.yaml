@@ -1,0 +1,6 @@
+# Shared subflow: clear the chat via the overflow menu.
+
+appId: com.ayushig.localrag.demo
+---
+- tapOn: "More"
+- tapOn: "Clear chat"
