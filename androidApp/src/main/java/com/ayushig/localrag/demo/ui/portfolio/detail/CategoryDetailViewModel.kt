@@ -10,8 +10,6 @@ import com.ayushig.localrag.demo.domain.usecase.portfolio.GetMetalHoldingsUseCas
 import com.ayushig.localrag.demo.domain.usecase.portfolio.GetStockHoldingsUseCase
 import com.ayushig.localrag.demo.domain.usecase.portfolio.GetWealthInvestmentsUseCase
 import com.ayushig.localrag.demo.ui.navigation.CategoryDetailRoute
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.async
@@ -19,8 +17,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-@HiltViewModel
-class CategoryDetailViewModel @Inject constructor(
+class CategoryDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val getCategorySummary: GetCategorySummaryUseCase,
     private val getLeveragedPositions: GetLeveragedPositionsUseCase,

@@ -25,8 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 import com.ayushig.localrag.demo.R
 import com.ayushig.localrag.demo.core.Formatters
 import com.ayushig.localrag.demo.domain.model.portfolio.CategorySummary
@@ -37,7 +37,7 @@ import com.ayushig.localrag.demo.ui.portfolio.components.SignedAmountAndPercent
 fun CategoryDetailRoute(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: CategoryDetailViewModel = hiltViewModel(),
+    viewModel: CategoryDetailViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     CategoryDetailScreen(

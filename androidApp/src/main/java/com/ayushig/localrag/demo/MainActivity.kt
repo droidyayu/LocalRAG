@@ -24,9 +24,7 @@ import com.ayushig.localrag.demo.ui.navigation.AssistantRoute
 import com.ayushig.localrag.demo.ui.navigation.PortfolioRoute
 import com.ayushig.localrag.demo.ui.navigation.RetrievalRoute
 import com.ayushig.localrag.demo.ui.theme.LocalRAGTheme
-import dagger.hilt.android.AndroidEntryPoint
 
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

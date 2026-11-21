@@ -20,8 +20,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 import com.ayushig.localrag.demo.domain.model.portfolio.AssetCategory
 import com.ayushig.localrag.demo.ui.portfolio.components.AllocationBar
 import com.ayushig.localrag.demo.ui.portfolio.components.BalanceStrip
@@ -33,7 +33,7 @@ import com.ayushig.localrag.demo.ui.portfolio.components.ValueHeader
 fun PortfolioHomeRoute(
     onCategoryClick: (AssetCategory) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: PortfolioHomeViewModel = hiltViewModel(),
+    viewModel: PortfolioHomeViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     PortfolioHomeScreen(

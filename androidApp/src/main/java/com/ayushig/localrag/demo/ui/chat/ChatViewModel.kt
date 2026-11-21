@@ -2,11 +2,6 @@ package com.ayushig.localrag.demo.ui.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ayushig.localrag.demo.BuildConfig
-import com.ayushig.localrag.demo.domain.model.ChatMessage
-import com.ayushig.localrag.demo.domain.model.MessageSource
-import com.ayushig.localrag.demo.domain.model.Role
-import com.ayushig.localrag.demo.domain.model.ToolCallRecord
 import com.ayushig.localrag.AgentConfig
 import com.ayushig.localrag.AgentEvent
 import com.ayushig.localrag.AgentMessage
@@ -17,16 +12,18 @@ import com.ayushig.localrag.LocalRag
 import com.ayushig.localrag.LocalRagState
 import com.ayushig.localrag.Passage
 import com.ayushig.localrag.demo.data.LocalRagConfigFactory
-import com.ayushig.localrag.demo.data.ModelFileLocator
-import com.ayushig.localrag.demo.data.ModelSelectionStore
 import com.ayushig.localrag.demo.data.assistant.DocumentationContext
 import com.ayushig.localrag.demo.domain.assistant.NoInformationFallback
+import com.ayushig.localrag.demo.domain.model.ChatMessage
+import com.ayushig.localrag.demo.domain.model.MessageSource
 import com.ayushig.localrag.demo.domain.model.ModelOption
+import com.ayushig.localrag.demo.domain.model.Role
+import com.ayushig.localrag.demo.domain.model.ToolCallRecord
 import com.ayushig.localrag.demo.domain.model.TurnTimings
-import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.UUID
-import javax.inject.Inject
-import android.util.Log
+import com.ayushig.localrag.demo.platform.AppInfo
+import com.ayushig.localrag.demo.platform.AppLog
+import com.ayushig.localrag.demo.platform.ModelFiles
+import com.ayushig.localrag.demo.platform.ModelSelection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,26 +31,28 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
-@HiltViewModel
-class ChatViewModel @Inject constructor(
-    private val modelFileLocator: ModelFileLocator,
-    private val selectionStore: ModelSelectionStore,
+class ChatViewModel(
+    private val modelFiles: ModelFiles,
+    private val selection: ModelSelection,
     private val configFactory: LocalRagConfigFactory,
     private val agentConfig: AgentConfig,
     private val documentationContext: DocumentationContext,
     private val localRag: LocalRag,
+    private val appInfo: AppInfo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         ChatUiState(
             modelOption = configFactory.selected(),
             availableModels = ModelOption.entries.filterTo(mutableSetOf()) {
-                modelFileLocator.isPresent(it)
+                modelFiles.isPresent(it)
             },
-            libraryVersion = BuildConfig.LITERTLM_VERSION,
-            modelPresent = modelFileLocator.isPresent(configFactory.selected()),
-            expectedModelPath = modelFileLocator.fileFor(configFactory.selected()).absolutePath,
+            libraryVersion = appInfo.litertlmVersion,
+            modelPresent = modelFiles.isPresent(configFactory.selected()),
+            expectedModelPath = modelFiles.pathFor(configFactory.selected()),
         ),
     )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -88,9 +87,9 @@ class ChatViewModel @Inject constructor(
     /** Switches models on the same engine: persist, retarget, reload. Nothing else moves. */
     fun onModelSelected(option: ModelOption) {
         if (option == _uiState.value.modelOption && _uiState.value.modelPresent) return
-        if (!modelFileLocator.isPresent(option)) return
-        Log.d(TAG, "switching model to ${option.displayName}")
-        selectionStore.select(option)
+        if (!modelFiles.isPresent(option)) return
+        AppLog.d(TAG, "switching model to ${option.displayName}")
+        selection.select(option)
         generationJob?.cancel()
         generationJob = null
         localRag.updateConfig(configFactory.create(option))
@@ -105,10 +104,10 @@ class ChatViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             modelOption = option,
             availableModels = ModelOption.entries.filterTo(mutableSetOf()) {
-                modelFileLocator.isPresent(it)
+                modelFiles.isPresent(it)
             },
-            modelPresent = modelFileLocator.isPresent(option),
-            expectedModelPath = modelFileLocator.fileFor(option).absolutePath,
+            modelPresent = modelFiles.isPresent(option),
+            expectedModelPath = modelFiles.pathFor(option),
         )
     }
 
@@ -137,6 +136,7 @@ class ChatViewModel @Inject constructor(
         sendPrompt(question)
     }
 
+    @OptIn(ExperimentalUuidApi::class)
     private fun sendPrompt(prompt: String) {
         if (prompt.isEmpty()) return
 
@@ -154,8 +154,8 @@ class ChatViewModel @Inject constructor(
                 )
             }
 
-        val userMessage = ChatMessage(id = UUID.randomUUID().toString(), role = Role.USER, text = prompt)
-        val replyId = UUID.randomUUID().toString()
+        val userMessage = ChatMessage(id = Uuid.random().toString(), role = Role.USER, text = prompt)
+        val replyId = Uuid.random().toString()
         val placeholder =
             ChatMessage(id = replyId, role = Role.MODEL, text = "", isStreaming = true)
 
@@ -192,7 +192,7 @@ class ChatViewModel @Inject constructor(
         history: List<AgentMessage>,
         documentation: List<Passage>,
     ) {
-        Log.d(TAG, "send \"$prompt\" via agent")
+        AppLog.d(TAG, "send \"$prompt\" via agent")
         // The calls accumulate here as the turn runs, so the placeholder bubble can show them
         // live and the finished message keeps them for its expandable details.
         val records = mutableListOf<ToolCallRecord>()

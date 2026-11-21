@@ -47,8 +47,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 import com.ayushig.localrag.LocalRagState
 import com.ayushig.localrag.demo.domain.model.ChatMessage
 import com.ayushig.localrag.demo.domain.model.MessageSource
@@ -60,7 +60,7 @@ import com.ayushig.localrag.demo.domain.model.ToolCallRecord
 @Composable
 fun ChatRoute(
     modifier: Modifier = Modifier,
-    viewModel: ChatViewModel = hiltViewModel(),
+    viewModel: ChatViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
