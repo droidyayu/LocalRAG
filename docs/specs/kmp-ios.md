@@ -274,3 +274,77 @@ Fixtures: a corrupted bundle, a mismatched-embedding bundle, and the real bundle
 - Exact model wording and exact figure text from the model. Figures are checked by unit tests (A9) and by reading screenshots.
 - Speed and battery. Measured by hand in L4.
 - Over-the-air bundle download: the seam exists, no downloader is built.
+
+---
+
+# Appendix C. Factory execution plan (sf-conductor / sf-build)
+
+Rule from the factory: a script does deterministic work, Muse does reading and bulk writing, Claude owns intent, failing tests, gates, concurrency and review verdicts. The failure analysis (Appendix A) is the research that makes each Muse brief precise: every brief below quotes the files, lines and traps it needs, so Muse does not rediscover them.
+
+## C1. Branches and gates
+
+- Integration branch: `kmp-ios` (cut from `main` after this spec merges). Muse tasks run in sibling worktrees `.wt-<slug>` on `oc/<slug>`, cut from `kmp-ios`.
+- Claude merges a task into `kmp-ios` only when the owner says "merge" for it. Nothing goes to `main` without the owner's explicit go-ahead; the final `kmp-ios` → `main` pull request is the last gate.
+- Briefs, Muse logs and the shared research file live outside the repo (`~/Ayushi/.factory-kmp-ios/`), so nothing factory-related lands in this repo or in any platform repo.
+- Each task is at most 400 changed lines and at most 3 review rounds, on the primary model first. Escalate only per the sf-build policy. The allowance script runs before every Muse launch.
+- Every task ends with evidence: commands run, real output tails, what was not run.
+
+## C2. Before any Muse run (Claude, scripts)
+
+| Step | Who | Done when |
+|---|---|---|
+| M0 Muse sandbox check | Claude, one scratch task | Muse can run `./gradlew -p localrag-tooling :localrag-core:test` in a worktree. **Unverified** whether its sandbox has the Android SDK or Xcode. Anything it cannot run (Android build, `xcodebuild`, emulator, Maestro) is run by Claude after each round |
+| `scripts/verify.sh` | Claude writes (deterministic, not Muse) | One command prints an evidence table: core tests (JVM, then iOS sim), SDK tests, demo unit tests, `assembleDebug`, `verifyNoPlatformDependencies`, golden-bundle hash. Tied to the head commit. The existing GitHub workflow is ubuntu-only and cannot run iOS, so this local script is the iOS gate |
+| Baseline | script | `verify.sh` green on `main`; golden bundle hash and `queries.tsv` ranking stored as test resources |
+| Failing tests first | Claude | A1–A9 skeletons committed, red for the right reason, before Muse starts the phase they belong to |
+
+## C3. Delegation matrix
+
+"Tests" always means Claude writes them first and Muse makes them pass without editing them. Phase numbers match the Phases list in the spec body.
+
+| Phase | Task | Executor | Brief must carry (from the research) |
+|---|---|---|---|
+| 0 | `verify.sh`, golden capture | Claude + script | existing commands from `AGENTS.md`; CI file |
+| 0 | Risk scan of core for F1 and F2 | Muse, read-only (`muse-read.sh`) | list every `HashMap` iteration that reaches a ranking, every regex using `\d`/`\s`/`DOT_MATCHES_ALL`, every `lowercase`/`isLetterOrDigit` in `text/`, `document/`, `index/`; output is a capped table of `path:line`. Claude verifies the cited lines |
+| 1 | S1 toolchain spike | Claude (version choice is an architecture decision) | F14–F17: Kotlin 2.3.20 vs Xcode 27.2, AGP 9 KMP plugin, root `buildscript` KGP override, language-level pin, included build |
+| 1 | `git mv` core to `commonMain`/`commonTest`, `jvmMain` for `BundleWriter` | Muse | exact file list (25 files), keep behaviour, no logic edits |
+| 1 | `java.time` → `kotlinx-datetime` in `DocumentValidator` and the two document files | Muse | `today` becomes an injected value; `LocalDate.parse` failure must still map to null |
+| 1 | `BundleReader` without `java.io`/`ByteBuffer`; little-endian decode | Muse after Claude's tests | F5, F6: committed golden bundle read test, vectors round-trip, zip written by `BundleWriter` (data descriptors) must read on iOS |
+| 1 | Parity harness + Unicode fixture | Muse writes harness; Claude picks fixture rows and expected ranking | F1, F2: ids and order compared, scores within 1e-9; accents, Devanagari, `₹`, curly quotes, em dash, NBSP, emoji |
+| 1 | Rewrite `verifyNoPlatformDependencies` + negative test | Claude (it is a gate) | F7: every target classpath; test that adding a forbidden dependency turns it red |
+| 2 | Plugin still builds the byte-identical bundle | script | `generateLocalRagBundle` hash equals baseline |
+| 3 | Rename `localrag-android` → `localrag`, package change across SDK and demo imports | Muse (mechanical; one diff may exceed 400 lines as a pure move, say so in the brief) | decision D2; no logic edits; imports only |
+| 3 | Seam interfaces, `SingleFlight` joins the previous call, `unloadModels` under one lock | Claude writes tests and the seam; Muse implements | F9, F10, F11: slow fake engine, unload during a running turn, model switch never has two engines. 3 runs for flakiness |
+| 3 | Lift the GPU-probe + CPU-fallback policy to common over `createEngine(backend)` | Muse | F13: `Generator.createOrNull` and `probeBackend` are the source; behaviour must not change on Android |
+| 3 | Android actuals wrapping `Generator`, `QueryEmbedder`; bundle load via platform file API | Muse | F12: `BundleLoader` uses `Context.assets`, `filesDir`, `File.renameTo`; `SignatureVerifier` takes `java.io.File` in the public API, so it must move to a path or bytes |
+| 4 | S3 Swift spike (load, generate, cancel, embed) | Claude on a real device | F8, F10, F18 |
+| 4 | Swift package `localrag-ios`: engine implementing the seams, unit tests with a fake | Muse writes from the Swift API facts in this spec; Claude builds and tests with `xcodebuild` | Swift `Engine`, `EngineConfig(modelPath:backend:maxNumTokens:cacheDir:)`, `sendMessageStream`, `SamplerConfig`; one file owns all LiteRT calls (F21); explicit `shutdown()` (F11); cancellation via `Task` (F10) |
+| 5 | `git mv` `domain/`, `data/`, `ui/`, `core/` to `shared/commonMain` | Muse | file list from the app tree; Android build must stay green |
+| 5 | `Formatters` common rewrite | Claude writes `FormattingTest` golden strings first; Muse implements | F3, F4: hand-written, fixed locale, English month table, same strings as today's `FormattersTest` |
+| 5 | Hilt → Koin: `AppModule`, `LocalRagModule`, 4 ViewModels, 4 screens | Muse | the 20 files that mention Hilt; `hiltViewModel` → `koinViewModel`; `SavedStateHandle` nav args |
+| 5 | `expect/actual` for `ModelFileLocator`, `ModelSelectionStore`, logger, memory hook | Muse | Android actual = today's code unchanged |
+| 5 | `testTag` on every element Maestro touches; debug bundle line; scripted engine + launch argument | Muse | M4, B2, B1; debug-only, absent from release |
+| 6 | `iosApp` shell, bundle packaging run-script phase | Muse drafts a text project description; Claude builds | F19; check the file is inside the `.app` |
+| 6 | `scripts/push_model_ios.sh`, `maestro/lib/{android,ios}.sh`, runner split | Muse | M2, M3, M7; `xcrun simctl` commands |
+| 6 | Maestro flows 00–60 | Muse writes from the B3 table; Claude runs them | M1, M4, M5, M9; `hideKeyboard`, `id:`, per-platform ready label |
+| 7 | `AGENTS.md`, `README.md` updates | Muse drafts, Claude edits | folder layout, build commands, rules still true |
+
+## C4. Review and verify
+
+- Every diff is read in full by Claude before merge (sf-build step 7). For the concurrency tasks, the iOS engine and the verification gate, read every line twice.
+- `sf-review` after phase 3 (engineering, QA), after phase 5 (design, QA) and after phase 6 (all lenses, plus ops for the runner). Muse lenses report; Claude verifies each cited `path:line`.
+- Evidence: `verify.sh` table per pull request. Maestro lanes run on the developer Mac and are listed as "not run" when no device or simulator is available.
+- Record every task with `record-review.sh`. Run `sf-retro` at the end of phases 3 and 6 and after any task that needed a Muse correction round.
+
+## C5. What Muse cannot do here, so Claude does
+
+- Run Xcode or the iOS simulator, drive Maestro, read a physical device (S3, S4, A11).
+- Choose toolchain versions (S1) and decide the iOS default model (S4).
+- Own `verifyNoPlatformDependencies`, the engine seams, `SingleFlight`, the output gate and its tests.
+
+## C6. Open items before the first Muse run
+
+1. D1–D6 answered (the spec stays `draft` until then).
+2. Owner confirms the `kmp-ios` integration branch.
+3. M0 result: what Muse's sandbox can run.
+4. Autonomy level for this repo (how many merges the owner wants to approve one by one).
