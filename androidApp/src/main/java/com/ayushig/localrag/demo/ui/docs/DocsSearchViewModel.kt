@@ -6,8 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.ayushig.localrag.LocalRag
 import com.ayushig.localrag.LocalRagState
 import com.ayushig.localrag.Passage
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,8 +22,7 @@ data class DocsSearchUiState(
     val lastQueryMs: Long = 0,
 )
 
-@HiltViewModel
-class DocsSearchViewModel @Inject constructor(
+class DocsSearchViewModel(
     private val localRag: LocalRag,
 ) : ViewModel() {
 

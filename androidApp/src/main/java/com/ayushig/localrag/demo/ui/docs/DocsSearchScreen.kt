@@ -23,15 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 import com.ayushig.localrag.LocalRagState
 import com.ayushig.localrag.Passage
 
 @Composable
 fun DocsSearchRoute(
     modifier: Modifier = Modifier,
-    viewModel: DocsSearchViewModel = hiltViewModel(),
+    viewModel: DocsSearchViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     DocsSearchScreen(
