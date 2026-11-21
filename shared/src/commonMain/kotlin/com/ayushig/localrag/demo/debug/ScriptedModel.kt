@@ -74,7 +74,7 @@ object ScriptedModel {
         if (nextTool >= 0) text = text.substring(0, nextTool)
         text = text.trim()
         if (text.isEmpty()) return null
-        return text.replace("\n", "; ")
+        return withSentenceEnding(text.replace("\n", "; "))
     }
 
     /** The first pre-searched passage's text (never its title line), flattened to one line. */
@@ -91,7 +91,16 @@ object ScriptedModel {
         }
         text = text.trim()
         if (text.isEmpty()) return null
-        return text.replace("\n", "; ")
+        return withSentenceEnding(text.replace("\n", "; "))
+    }
+
+    /**
+     * A quoted observation or passage must end a sentence or the output gate rejects it as
+     * truncated. The full stop follows the last figure without changing any figure itself.
+     */
+    private fun withSentenceEnding(text: String): String {
+        val last = text.lastOrNull() ?: return text
+        return if (last == '.' || last == '!' || last == '?') text else "$text."
     }
 
     /** Earliest holding name mentioned, so "do I hold any gold" finds gold. */
