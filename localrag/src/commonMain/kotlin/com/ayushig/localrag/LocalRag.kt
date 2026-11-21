@@ -34,17 +34,17 @@ import kotlinx.coroutines.withContext
  * the shape of the API.
  *
  * Concurrency model: one [Mutex] guards every field a second thread can touch (the loaded bundle,
- * the retriever, both engines, the config, whether a turn is generating, the memory listener and
+ * the retriever, both engines, the config, the count of active uses, the memory listener and
  * every state update), and no section ever suspends while holding it. A turn snapshots the
  * generator under that mutex and then generates without it, so [unloadModels] (which OS memory
  * callbacks invoke from any thread and which therefore cannot suspend) never closes an engine
- * mid-turn: when a turn is active it only records an atomic request flag and the turn's own end,
- * under the mutex, performs the unload, release or model switch. A new [runAgent] turn cancels
+ * mid-use: when a turn or a retrieval is active it only records an atomic request flag and the
+ * use's own end, under the mutex, performs the unload, release or model switch. A new [runAgent] turn cancels
  * the previous one through [SingleFlight], which then waits until that turn has fully ended before
  * the new turn starts, so two generations never overlap and the cancelled caller always receives
  * a [CancellationException]. Two [initialize] calls serialize on a second mutex: the loser waits
  * for the winner and accepts its result, so models load once. Every deferred cleanup runs
- * cleans up under [NonCancellable], so cancelling a turn can never leave the SDK locked or an
+ * under [NonCancellable], so cancelling a turn can never leave the SDK locked or an
  * engine unclosed.
  */
 @OptIn(ExperimentalAtomicApi::class)
@@ -93,7 +93,12 @@ class LocalRag internal constructor(
     private var retriever: Retriever? = null
     private var embedder: EmbeddingEngine? = null
     private var generator: GenerationEngine? = null
-    private var turnActive = false
+    /**
+     * How many SDK uses are inside the engines right now: generating turns and embedding
+     * retrievals both count. Deferred unload/release/switch requests only run when this
+     * reaches zero, so an engine is never closed under a running query or turn.
+     */
+    private var activeUses = 0
     private var stopListening: (() -> Unit)? = null
     private val unloadRequested = AtomicBoolean(false)
     private val releaseRequested = AtomicBoolean(false)
@@ -108,6 +113,10 @@ class LocalRag internal constructor(
     private val flight = SingleFlight()
 
     suspend fun initialize() {
+        // Apply any request a contended non-suspending drain had to leave pending before
+        // trusting the state: with the state still saying Ready, an early return here would
+        // silently drop a requested release or model switch.
+        mutex.withLock { drainLocked() }
         if (_state.value is LocalRagState.Ready) return
         if (!initMutex.tryLock()) {
             // Another call is already loading: wait for it and accept whatever it produced
@@ -181,14 +190,24 @@ class LocalRag internal constructor(
     suspend fun retrieveOnly(text: String): List<Passage> = withContext(ioDispatcher) {
         val snapshot = mutex.withLock {
             drainLocked()
+            activeUses++
             Snapshot(retriever, embedder, config.topK, config.categories)
         }
-        snapshot.retriever?.retrieve(
-            query = text,
-            topK = snapshot.topK,
-            queryVector = snapshot.embedder?.embed(text),
-            categories = snapshot.categories,
-        ).orEmpty()
+        try {
+            snapshot.retriever?.retrieve(
+                query = text,
+                topK = snapshot.topK,
+                queryVector = snapshot.embedder?.embed(text),
+                categories = snapshot.categories,
+            ).orEmpty()
+        } finally {
+            withContext(NonCancellable) {
+                mutex.withLock {
+                    activeUses--
+                    drainLocked()
+                }
+            }
+        }
     }
 
     /**
@@ -212,7 +231,7 @@ class LocalRag internal constructor(
                 val activeConfig: Config
                 mutex.withLock {
                     drainLocked()
-                    turnActive = true
+                    activeUses++
                     engineSnapshot = generator
                     activeConfig = this@LocalRag.config
                 }
@@ -235,7 +254,7 @@ class LocalRag internal constructor(
                 } finally {
                     withContext(NonCancellable) {
                         mutex.withLock {
-                            turnActive = false
+                            activeUses--
                             drainLocked()
                         }
                     }
@@ -247,9 +266,9 @@ class LocalRag internal constructor(
      * Drops both models but keeps the bundle, so the library keeps retrieving from BM25.
      * Call from onTrimMemory(TRIM_MEMORY_COMPLETE).
      *
-     * Never suspends, so an OS memory callback can invoke it from any thread. When a turn is
-     * generating it only records the request; the turn's end performs the unload, flips the
-     * state and only then lets the next turn start.
+     * Never suspends, so an OS memory callback can invoke it from any thread. When a turn or
+     * a retrieval is active it only records the request; the use's end performs the unload,
+     * flips the state and only then lets the next turn start.
      */
     fun unloadModels() {
         unloadRequested.store(true)
@@ -278,7 +297,7 @@ class LocalRag internal constructor(
      * so a non-suspending callback thread can record them without the mutex.
      */
     private fun drainLocked() {
-        if (turnActive) return
+        if (activeUses > 0) return
         if (releaseRequested.compareAndSet(true, false)) {
             val next = pendingConfig.exchange(null)
             if (next != null) config = next

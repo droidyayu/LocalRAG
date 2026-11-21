@@ -59,7 +59,12 @@ internal class SingleFlight {
             try {
                 previous.join()
             } catch (cancelled: CancellationException) {
+                // A waiter cancelled mid-join must still wait for the previous owner to fully
+                // end (ignoring its own cancellation) before rethrowing: otherwise a later
+                // caller joining this call would proceed while the previous call is still in
+                // its non-cancellable cleanup, and two generations would overlap.
                 withContext(NonCancellable) {
+                    previous.join()
                     mutex.withLock {
                         if (inFlight === self) inFlight = null
                     }
