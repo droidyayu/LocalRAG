@@ -3,6 +3,7 @@ package com.ayushig.localrag.android.internal
 import android.content.Context
 import com.ayushig.localrag.core.bundle.Bundle
 import com.ayushig.localrag.core.bundle.BundleReader
+import com.ayushig.localrag.core.bundle.read
 import java.io.File
 
 /**
