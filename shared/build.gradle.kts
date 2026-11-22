@@ -15,6 +15,10 @@ kotlin {
         namespace = "com.ayushig.localrag.demo.shared"
         compileSdk = 37
         minSdk = 26
+        // Compose Multiplatform resources are packaged as Android assets only when the KMP
+        // library plugin processes Android resources; without this the APK has no
+        // composeResources and the app crashes on the first drawable.
+        androidResources { enable = true }
         withHostTest { isReturnDefaultValues = true }
     }
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
