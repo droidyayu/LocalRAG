@@ -14,6 +14,7 @@ litertlm = "0.17.0"
 coroutines = "1.11.0"
 navigation = "2.10.1"
 kotlinxSerialization = "1.11.0"
+skainet = "0.57.0"
 
 [libraries]
 android-gradle-api = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
@@ -42,6 +43,9 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+skainet-bom = { group = "sk.ainet", name = "skainet-bom", version.ref = "skainet" }
+skainet-lang-core = { group = "sk.ainet.core", name = "skainet-lang-core" }
+skainet-backend-cpu = { group = "sk.ainet.core", name = "skainet-backend-cpu" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
