@@ -18,6 +18,7 @@ koin = "4.2.2"
 lifecycleKmp = "2.9.6"
 navigationKmp = "2.9.2"
 kotlinxSerialization = "1.11.0"
+skainet = "0.57.0"
 
 [libraries]
 android-gradle-api = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
@@ -54,6 +55,9 @@ lifecycle-runtime-compose-kmp = { group = "org.jetbrains.androidx.lifecycle", na
 navigation-compose-kmp = { group = "org.jetbrains.androidx.navigation", name = "navigation-compose", version.ref = "navigationKmp" }
 okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
 litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+skainet-bom = { group = "sk.ainet", name = "skainet-bom", version.ref = "skainet" }
+skainet-lang-core = { group = "sk.ainet.core", name = "skainet-lang-core" }
+skainet-backend-cpu = { group = "sk.ainet.core", name = "skainet-backend-cpu" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
