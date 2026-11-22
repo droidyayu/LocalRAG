@@ -114,3 +114,14 @@ and the screenshots if any answer text looks wrong.
   when that happens.
 - The simulator has no GPU delegate path of a physical iPhone: use the 270M
   model there and keep E2B for devices and Android.
+
+## Several Android devices attached
+
+The runner needs one target. With more than one adb device (say a phone and an emulator), pick one:
+
+```bash
+ANDROID_SERIAL=emulator-5554 ./maestro/run_acceptance.sh --platform android --lane scripted
+```
+
+Maestro cannot drive a physical iPhone (simulators only), and a phone with a work profile can stall its
+driver install; an emulator avoids both.

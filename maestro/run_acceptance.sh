@@ -113,6 +113,7 @@ platform_install || exit 1
 platform_clear_logs || true
 
 MAESTRO_ARGS=()
+if [ "$PLATFORM" = android ] && [ -n "${ANDROID_SERIAL:-}" ]; then MAESTRO_ARGS=(--device "$ANDROID_SERIAL"); fi
 if [ "$PLATFORM" = "ios" ]; then
     MAESTRO_ARGS=(--platform ios --udid "$(ios_booted_udid)")
 fi

@@ -15,6 +15,12 @@ platform_check() {
     command -v maestro >/dev/null || { echo "ERROR: maestro not on PATH (brew install maestro)" >&2; return 1; }
     command -v adb >/dev/null || { echo "ERROR: adb not on PATH" >&2; return 1; }
     local count
+    # ANDROID_SERIAL picks one device when several are attached (adb honours it itself).
+    if [ -n "${ANDROID_SERIAL:-}" ]; then
+        adb -s "$ANDROID_SERIAL" get-state >/dev/null 2>&1 \
+            || { echo "ERROR: ANDROID_SERIAL=$ANDROID_SERIAL is not attached" >&2; return 1; }
+        return 0
+    fi
     count="$(adb devices | grep -c -w device)"
     if [ "$count" -eq 0 ]; then
         echo "ERROR: no adb device attached (plug one in or start an emulator)" >&2
@@ -52,5 +58,6 @@ platform_collect_logs() {
 
 # Device serial for the report.
 platform_id() {
+    if [ -n "${ANDROID_SERIAL:-}" ]; then echo "$ANDROID_SERIAL"; return; fi
     adb devices | awk 'NR==2{print $1}'
 }

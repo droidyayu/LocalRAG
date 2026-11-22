@@ -10,3 +10,8 @@ appId: com.ayushig.localrag.demo
     clearState: true
     arguments:
       localrag.engine: scripted
+# A cold start with cleared state can take a while on a slow emulator: wait for the tab bar
+# instead of letting the next tap race the first frame.
+- extendedWaitUntil:
+    visible: "Retrieval"
+    timeout: 60000
