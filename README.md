@@ -1,6 +1,7 @@
 # LocalRAG
 
-An Android app that pairs a **fintech app UI** with an **in-app assistant**. The assistant answers
+An on-device assistant pairing a **fintech app UI** with an **in-app assistant**, running on
+Android and iOS from one Kotlin Multiplatform codebase. The assistant answers
 FAQ-style and account-specific questions so users can understand the app, their account status, and
 what to do next — without leaving the screen they're on or filing a support ticket.
 
@@ -9,9 +10,10 @@ what to do next — without leaving the screen they're on or filing a support ti
 Two halves that work together:
 
 **1. The fintech app UI**
-A Compose-based fintech client — portfolio home and category detail screens, an assistant tab,
+A Compose Multiplatform fintech client — portfolio home and category detail screens, an assistant tab,
 and a documentation retrieval tab. This is the surface the user actually uses, and its
-repository data is also the source of truth the assistant answers from.
+repository data is also the source of truth the assistant answers from. It ships in a thin
+Android host (`:androidApp`) and a thin iOS host (`iosApp/`, iPhone only, iOS 17+).
 
 **2. The assistant**
 A conversational help assistant embedded in the app. It handles the kinds of questions users
@@ -37,9 +39,9 @@ that data leaving the device.
 
 ## Current state
 
-The repository holds two things: the **LocalRAG library** (`localrag-tooling/localrag-core`,
-`localrag-tooling/localrag-gradle-plugin`, `localrag-android` — see `AGENTS.md`) and the **demo
-app** (`:app`), which is the library's first consumer:
+The repository holds the **LocalRAG library** (`localrag-tooling/localrag-core`,
+`localrag-tooling/localrag-gradle-plugin`, `localrag` — see `AGENTS.md`) and the **demo
+UI** (`:shared`, hosted by `:androidApp` and `iosApp/`), which is the library's first consumer:
 
 - Fintech UI — portfolio home and category detail screens backed by repository data.
 - Assistant — a chat surface answering portfolio questions from formatted data (figures are
@@ -105,10 +107,13 @@ titles the answer was built from, and the chat screen renders them as expandable
 
 **Decided, and built:**
 
-- DI framework — Hilt, wired up in `di/`
+- DI framework — Koin, wired up in `di/` (`shared/.../demo/di/SharedModule.kt`)
 - On-device inference runtime — Gemma 4 E2B IT or Gemma 3 270M IT on LiteRT-LM, pushed
-  with `scripts/push_model.sh e2b|270m` and switchable in the assistant's overflow menu
-  (the small model runs the same grammar, tools, and gate, just faster and weaker)
+  with `scripts/push_model.sh e2b|270m` (Android) or `scripts/push_model_ios.sh e2b|270m`
+  (iOS) and switchable in the assistant's overflow menu
+  (the small model runs the same grammar, tools, and gate, just faster and weaker).
+  iOS generation runs through a Swift LiteRT-LM engine (`iosApp/iosApp/LiteRT`); iOS ships
+  BM25-only, no embeddings yet
 - Retrieval is BM25-only by default; the embedding path (build-time sidecar plus runtime
   `QueryEmbedder`) exists but no embedding model ships, so hybrid retrieval is unproven
   on device
@@ -121,32 +126,34 @@ titles the answer was built from, and the chat screen renders them as expandable
 
 | | |
 |---|---|
-| Language | Kotlin 2.3.20 |
-| Architecture | MVVM + Clean Architecture (`ui` / `domain` / `data`) |
-| UI | Jetpack Compose, Material 3 (`NavigationSuiteScaffold` for adaptive layout) |
+| Language | Kotlin 2.3.20 (Multiplatform: Android + iOS simulator/arm64) |
+| Architecture | MVVM + Clean Architecture (`ui` / `domain` / `data`), shared in `:shared` `commonMain` |
+| UI | Compose Multiplatform, Material 3 (`Scaffold` + `NavigationBar`) |
 | Build | Gradle (Kotlin DSL), AGP 9.3.2, version catalog in `gradle/libs.versions.toml` |
-| SDK | `minSdk` 26, `targetSdk` / `compileSdk` 37 |
+| Android | `minSdk` 26, `targetSdk` / `compileSdk` 37 |
+| iOS | iPhone only, iOS 17+, XcodeGen project in `iosApp/` |
 | Package | `com.ayushig.localrag.demo` (library: `com.ayushig.localrag`) |
-| On-device AI | LiteRT-LM 0.17.0 (generation + embeddings) |
+| On-device AI | LiteRT-LM 0.17.0 (generation + embeddings on Android; Swift engine + BM25-only on iOS) |
 
 ## Building
 
 ```bash
-./gradlew assembleDebug      # build the debug APK
-./gradlew installDebug       # build and install on a connected device/emulator
-./gradlew test               # unit tests
-./gradlew connectedAndroidTest   # instrumented tests (device required)
+./gradlew :androidApp:assembleDebug   # build the debug APK (core, plugin, bundle, app)
+./gradlew :androidApp:installDebug    # build and install on a connected device/emulator
+./gradlew :localrag:allTests :shared:allTests :androidApp:testDebugUnitTest  # unit tests
+scripts/verify.sh [--quick] [--skip-ios]  # full local gate incl. iOS simulator (needs Xcode)
 ```
 
-Or open the project in Android Studio and run the `app` configuration.
+Or open the project in Android Studio and run the `androidApp` configuration.
 
 ## Verifying the assistant
 
 ```bash
 ./gradlew :androidApp:generateLocalRagBundle   # rebuild the docs bundle only
 python3 tools/agent-poc/agent_poc.py demo   # gate + sizes, no device needed
-./maestro/run_assistant_tests.sh        # on-device Q&A suite (model must be pushed);
-                                        # writes maestro/report/ with screenshots + logcat
+./maestro/run_acceptance.sh --platform android|ios --lane scripted|model  # on-device Q&A suite
+                                        # (model lane needs the model pushed);
+                                        # writes maestro/report/ with screenshots + logs
 ```
 
 ## Current layout
@@ -154,9 +161,9 @@ python3 tools/agent-poc/agent_poc.py demo   # gate + sizes, no device needed
 What exists on disk today. The library modules are documented in `AGENTS.md`.
 
 ```
-androidApp/src/main/java/com/ayushig/localrag/demo/
+shared/src/commonMain/kotlin/com/ayushig/localrag/demo/
 ├── core/                    # shared formatting (figures are rendered, never generated)
-├── domain/                  # entities, repository interfaces, assistant models — no Android imports
+├── domain/                  # entities, repository interfaces, assistant models — no platform imports
 │   ├── assistant/           # fixed fallback copy
 │   ├── model/               # portfolio models, chat transcript, tool-call records
 │   ├── repository/          # repository interfaces
@@ -165,13 +172,17 @@ androidApp/src/main/java/com/ayushig/localrag/demo/
 │   ├── assistant/           # tool definitions, agent prompt copy
 │   ├── portfolio/           # fake data + calculations
 │   └── repository/          # fake portfolio repository
-├── di/                      # Hilt modules (LocalRagModule provides the singleton LocalRag)
+├── di/                      # Koin module (SharedModule provides the singleton LocalRag)
+├── platform/                # platform seams: model files, model selection, logger
 └── ui/                      # screens, ViewModels, navigation, theme
     ├── chat/                # assistant surface: working card, turn details, suggestions
     ├── docs/                # documentation search over retrieveOnly()
     └── portfolio/           # home + category detail screens
-androidApp/src/main/docs/           # Markdown corpus indexed by the plugin at build time
+shared/src/androidMain|iosMain/      # actuals: theme, logging, Koin iOS setup, entry points
+androidApp/src/main/java/.../demo/   # thin Android host: MainActivity + Android DI/platform actuals
+androidApp/src/main/docs/            # Markdown corpus indexed by the plugin at build time
 androidApp/src/main/localrag-clusters.json  # precomputed answers, written into the bundle
+iosApp/                              # thin iOS host: XcodeGen project + Swift LiteRT-LM engine
 ```
 
 ## Conventions

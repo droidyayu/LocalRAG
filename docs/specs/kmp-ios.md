@@ -1,6 +1,6 @@
 # Spec: Kotlin Multiplatform + iOS
 
-- Status: **agreed** (2026-11-21). Build in progress per Appendix C.
+- Status: **done** (2026-11-22). Built per Appendix C.
 - Risk tier: **medium** (public SDK contract and build system change; no auth, money, or user data)
 - Scope: this repository only (LocalRAG). Nothing here goes into the platform repo or any service repo.
 
