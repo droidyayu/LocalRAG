@@ -31,3 +31,12 @@ maestro/report/
 # Project-local Python environments (tools/*/README tells which to create).
 **/.venv/
 **/__pycache__/
+
+# Kotlin Gradle plugin session data
+.kotlin/
+
+# iOS app: the Xcode project is generated from iosApp/project.yml (xcodegen generate)
+iosApp/iosApp.xcodeproj/
+iosApp/build/
+iosApp/Vendor/
+maestro/report/

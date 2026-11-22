@@ -1,0 +1,30 @@
+package com.ayushig.localrag.demo.ui.chat
+
+import androidx.compose.runtime.Immutable
+import com.ayushig.localrag.LocalRagState
+import com.ayushig.localrag.demo.domain.model.ChatMessage
+import com.ayushig.localrag.demo.domain.model.ModelOption
+
+@Immutable
+data class ChatUiState(
+    val engineState: LocalRagState = LocalRagState.Idle,
+    val modelOption: ModelOption = ModelOption.E2B,
+    /** Options with a file actually on device; empty when nothing was pushed. */
+    val availableModels: Set<ModelOption> = emptySet(),
+    val modelPresent: Boolean = true,
+    val expectedModelPath: String = "",
+    val messages: List<ChatMessage> = emptyList(),
+    val input: String = "",
+    val isGenerating: Boolean = false,
+    /** What the running turn is doing right now; null when nothing runs. */
+    val activeActivity: String? = null,
+    val loadingElapsedSeconds: Int = 0,
+    val libraryVersion: String = "",
+) {
+    /**
+     * Sending needs a ready engine: the agent is the only answer path, so a question asked
+     * while loading could only be met with the fixed fallback.
+     */
+    val canSend: Boolean
+        get() = input.isNotBlank() && !isGenerating && engineState is LocalRagState.Ready
+}

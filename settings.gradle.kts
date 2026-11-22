@@ -29,6 +29,7 @@ rootProject.name = "LocalRAG"
 // resolution and dependency substitution for com.ayushig.localrag:localrag-core.
 includeBuild("localrag-tooling")
 
-include(":app")
-include(":localrag-android")
+include(":androidApp")
+include(":localrag")
+include(":shared")
  

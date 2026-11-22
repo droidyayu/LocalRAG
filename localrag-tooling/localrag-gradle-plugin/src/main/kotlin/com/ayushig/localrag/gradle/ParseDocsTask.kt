@@ -10,7 +10,9 @@ import com.ayushig.localrag.core.document.FrontMatterParser
 import com.ayushig.localrag.core.document.ParsedDocument
 import com.ayushig.localrag.core.document.ValidationConfig
 import java.io.File
-import java.time.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.gradle.api.DefaultTask
@@ -61,6 +63,8 @@ abstract class ParseDocsTask : DefaultTask() {
     @get:Input
     abstract val maxChunkTokens: Property<Int>
 
+    // kotlin.time.Clock is still experimental under the module's language level pin.
+    @OptIn(kotlin.time.ExperimentalTime::class)
     @TaskAction
     fun run(changes: InputChanges) {
         val outputDir = chunksDir.get().asFile
@@ -95,7 +99,7 @@ abstract class ParseDocsTask : DefaultTask() {
                 screenUriPattern = screenUriPattern.orNull,
                 staleAfterDays = staleAfterDays.get(),
             ),
-        ).validate(documents, LocalDate.now())
+        ).validate(documents, Clock.System.todayIn(TimeZone.currentSystemDefault()))
 
         val chunker = Chunker(ChunkerConfig(maxChunkTokens = maxChunkTokens.get()))
         // Only published documents reach the bundle; drafts stay invisible to users.

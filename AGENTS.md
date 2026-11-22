@@ -1,11 +1,12 @@
 # LocalRAG — working notes
 
-Two things live here:
+Three things live here:
 
-1. **LocalRAG**, a reusable Android library that answers help and FAQ questions fully on-device
-   from Markdown documentation owned by the host app.
-2. **A demo app** (`:app`) — a fintech UI plus an assistant — that is the library first consumer
-   and the place the library is exercised on a real device.
+1. **LocalRAG**, a reusable Kotlin Multiplatform library that answers help and FAQ questions
+   fully on-device from Markdown documentation owned by the host app.
+2. **A demo UI** (`:shared`) — a Compose Multiplatform fintech UI plus an assistant — that is
+   the library's first consumer and the place the library is exercised on a real device.
+3. **Two thin host apps** (`:androidApp` and `iosApp/`) that package the shared UI per platform.
 
 See `README.md` for the product picture and `tools/embed/README.md` for the embedding sidecar.
 
@@ -13,20 +14,24 @@ See `README.md` for the product picture and `tools/embed/README.md` for the embe
 
 ```
 LocalRAG/
-├── settings.gradle.kts         includeBuild("localrag-tooling"); :app, :localrag-android
+├── settings.gradle.kts         includeBuild("localrag-tooling"); :androidApp, :localrag, :shared
 ├── localrag-tooling/           an included build, isolated from the root
-│   ├── localrag-core/          pure Kotlin/JVM. No Android, no LiteRT, no Gradle API
-│   └── localrag-gradle-plugin/ plugin id com.ayushig.localrag
-├── localrag-android/           the AAR, namespace com.ayushig.localrag.android
-├── app/                        demo host, com.ayushig.localrag.demo
+│   ├── localrag-core/          pure Kotlin KMP (commonMain, jvmMain, iosArm64, iosSimulatorArm64).
+│   │                           No Android, no LiteRT, no Gradle API. BundleWriter stays in jvmMain.
+│   └── localrag-gradle-plugin/ plugin id com.ayushig.localrag (unchanged, consumes the jvm variant)
+├── localrag/                   the KMP SDK (commonMain, androidMain, iosMain), group com.ayushig.localrag
+├── shared/                     Compose Multiplatform demo UI: domain, data, Koin module, ui in
+│                               commonMain; exported iOS framework "Shared"
+├── androidApp/                 thin Android host, com.ayushig.localrag.demo
+├── iosApp/                     XcodeGen project (project.yml); Swift LiteRT-LM engine in iosApp/iosApp/LiteRT
 ├── tools/embed/                embedding sidecar scripts
 ├── tools/agent-poc/            stdlib Python PoC: context sizes, gate replays, prompt A/B
-└── maestro/                    on-device assistant acceptance suite + report runner
+└── maestro/                    on-device assistant acceptance, scripted and model lanes (android|ios)
 ```
 
 A Gradle plugin cannot be applied by a sibling project in the same build, and `buildSrc` cannot be
 published, so the plugin and the core it shares with the runtime sit in an included build.
-`:localrag-android` depends on `com.ayushig.localrag:localrag-core:0.1.0` and Gradle substitutes
+`:localrag` depends on `com.ayushig.localrag:localrag-core:0.1.0` and Gradle substitutes
 the included project.
 
 ## Rules
@@ -51,21 +56,27 @@ the included project.
 ### Demo app
 
 MVVM plus clean architecture, `presentation` → `domain` ← `data`, domain depends on nothing. The
-app uses `ui/` rather than `presentation/`. ViewModels call use cases, never repositories — the
-chat screen is the exception: it drives the SDK (`runAgent`, `retrieveOnly`) and the app-owned
-tools directly, since the deleted assistant use-case tier lived there. Screens are stateless
-and take an immutable state plus event lambdas.
+demo uses `ui/` rather than `presentation/`, and all of `ui`, `domain`, `data`, the Koin module
+and shared formatting live in `:shared` `commonMain`, so both host apps run the same code.
+ViewModels call use cases, never repositories — the chat screen is the exception: it drives the
+SDK (`runAgent`, `retrieveOnly`) and the app-owned tools directly, since the deleted assistant
+use-case tier lived there. Screens are stateless and take an immutable state plus event lambdas.
+DI is Koin.
 
 ## Current state
 
-The demo app answers portfolio questions from formatted data and documentation questions
+The demo answers portfolio questions from formatted data and documentation questions
 through the library, with generation running on the selected pushed model — Gemma 4 E2B IT
-or Gemma 3 270M IT (see `scripts/push_model.sh e2b|270m`, switchable in the overflow menu) —
+or Gemma 3 270M IT (see `scripts/push_model.sh e2b|270m` on Android,
+`scripts/push_model_ios.sh e2b|270m` on iOS, switchable in the overflow menu) —
 follow-up turns resolved against per-call history, and a documentation search screen driving
-`retrieveOnly`.
+`retrieveOnly`. The iOS host (`iosApp/`, iPhone only, iOS 17+) runs the same shared UI over the
+same bundle; it ships BM25 retrieval plus generation from its Swift engine, no embeddings yet.
 
-Architecture split: the SDK is a stateless engine. It hosts LiteRT-LM, loads bundles,
-retrieves, runs the generator inside agent turns on fresh per-call conversations, gates every
+Architecture split: the SDK is a stateless engine. On Android its androidMain actuals host
+LiteRT-LM; on iOS generation comes from the Swift engine in `iosApp/iosApp/LiteRT`, passed in
+through the SDK seams. It loads bundles, retrieves, runs the generator inside agent turns on
+fresh per-call conversations, gates every
 final text through the output gate, and exposes the configurable agent runner
 (`runAgent(query, AgentConfig, history, onEvent)`), which emits `AgentEvent` progress
 (thinking, tool calls, judging) for the host's activity UI; earlier turns ride along per
@@ -116,11 +127,12 @@ promote noise.
 ## Build
 
 ```bash
-./gradlew :app:assembleDebug            # builds core, plugin, bundle and app in one invocation
-./gradlew :app:generateLocalRagBundle   # bundle only
-./gradlew -p localrag-tooling :localrag-core:test
-./gradlew :localrag-android:testDebugUnitTest
+./gradlew :androidApp:assembleDebug            # builds core, plugin, bundle and app in one invocation
+./gradlew :androidApp:generateLocalRagBundle   # bundle only
+./gradlew -p localrag-tooling :localrag-core:jvmTest
+./gradlew :localrag:allTests :shared:allTests :androidApp:testDebugUnitTest
 ./gradlew publishToMavenLocal           # plus -p localrag-tooling for core and the plugin
+scripts/verify.sh [--quick] [--skip-ios]  # full local gate incl. iOS simulator tests (needs Xcode)
 ```
 
 Add `-PlocalRagEmbed=true` to exercise the embedding path with the deterministic hash sidecar.
@@ -128,7 +140,7 @@ Add `-PlocalRagEmbed=true` to exercise the embedding path with the deterministic
 ```bash
 python3 tools/agent-poc/agent_poc.py self-test   # gate/port checks, no device needed
 python3 tools/agent-poc/agent_poc.py demo        # scripted turns with sizes + verdicts
-./maestro/run_assistant_tests.sh                 # on-device suite; writes maestro/report/
+./maestro/run_acceptance.sh --platform android|ios --lane scripted|model  # on-device suite; writes maestro/report/
 ```
 
 Kotlin 2.3.20 · AGP 9.3.2 · Gradle 9.5 · Compose BOM 2025.12.00 · minSdk 26 · target/compileSdk 37.

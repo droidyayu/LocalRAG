@@ -1,0 +1,63 @@
+package com.ayushig.localrag.demo.ui.docs
+
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ayushig.localrag.LocalRag
+import com.ayushig.localrag.LocalRagState
+import com.ayushig.localrag.Passage
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlin.time.TimeSource
+
+@Immutable
+data class DocsSearchUiState(
+    val engine: LocalRagState = LocalRagState.Idle,
+    val query: String = "",
+    val passages: List<Passage> = emptyList(),
+    val searching: Boolean = false,
+    val searched: Boolean = false,
+    val lastQueryMs: Long = 0,
+)
+
+class DocsSearchViewModel(
+    private val localRag: LocalRag,
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(DocsSearchUiState())
+    val uiState: StateFlow<DocsSearchUiState> = _uiState.asStateFlow()
+
+    private var searchJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            localRag.state.collect { state -> _uiState.value = _uiState.value.copy(engine = state) }
+        }
+        viewModelScope.launch { localRag.initialize() }
+    }
+
+    fun onQueryChange(value: String) {
+        _uiState.value = _uiState.value.copy(query = value)
+    }
+
+    fun onSearch() {
+        val query = _uiState.value.query.trim()
+        if (query.isEmpty()) return
+
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(searching = true)
+        searchJob = viewModelScope.launch {
+            val start = TimeSource.Monotonic.markNow()
+            val passages = localRag.retrieveOnly(query)
+            _uiState.value = _uiState.value.copy(
+                passages = passages,
+                searching = false,
+                searched = true,
+                lastQueryMs = (TimeSource.Monotonic.markNow() - start).inWholeMilliseconds,
+            )
+        }
+    }
+}

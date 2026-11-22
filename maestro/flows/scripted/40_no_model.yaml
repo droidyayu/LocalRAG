@@ -1,0 +1,24 @@
+# Scripted lane: no model file on a fresh install.
+#
+# Default mode on purpose: NO launch argument, clearState true. The Assistant
+# tab shows the missing-model banner, while the Retrieval tab still answers
+# from the bundled corpus (retrieval needs no model).
+
+appId: com.ayushig.localrag.demo
+---
+- launchApp:
+    appId: com.ayushig.localrag.demo
+    stopApp: true
+    clearState: true
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: ".*Model not found.*"
+    timeout: 120000
+- tapOn: "Retrieval"
+- tapOn: "Ask the docs"
+- inputText: "how do I deposit funds"
+- hideKeyboard
+- tapOn: "Search"
+- extendedWaitUntil:
+    visible: ".*deposit-funds.*"
+    timeout: 60000

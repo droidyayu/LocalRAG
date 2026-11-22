@@ -1,0 +1,54 @@
+# Assistant acceptance suite: honesty paths and cancellation.
+#
+# Greetings carry no tools and no sources, so there is no positive label to wait on:
+# the turn is over when the working status is gone, and the check is that no source
+# label and no fallback appeared. Screenshots (taken by the runner script) carry the
+# actual wording for human review.
+
+appId: com.ayushig.localrag.demo
+---
+- launchApp:
+    appId: com.ayushig.localrag.demo
+# Cold start lands on the Portfolio tab; the assistant lives under Assistant.
+- tapOn: "Assistant"
+- extendedWaitUntil:
+    visible: ${READY_LABEL}
+    timeout: 300000
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Small talk: answered, not labelled, not a fallback.
+- tapOn: "Ask something"
+- inputText: 'Hi'
+- hideKeyboard
+- tapOn: "Send"
+- extendedWaitUntil:
+    notVisible: "Thinking…"
+    timeout: 180000
+- assertNotVisible: "no matching information"
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Advice is never given. Two outcomes are honest and model-dependent: the app's fixed refusal
+# ("... can't advise on buying or selling") when the model answers with advice and the output gate
+# refuses it, or the app's "I don't have information" fallback when the answer is rejected for lack
+# of evidence. Either ends the turn; what must never appear is advice itself. (visible: is a
+# whole-text regex, hence the .* wrappers.)
+- tapOn: "Ask something"
+- inputText: 'Should I buy more stocks?'
+- hideKeyboard
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: ".*(can't advise on buying or selling|have information on that yet).*"
+    timeout: 180000
+- assertNotVisible: ".*[Yy]ou should buy.*"
+- tapOn: "More"
+- tapOn: "Clear chat"
+
+# Cancellation drill: send, stop immediately, leave the state for the screenshot.
+# No assertions — the runner screenshot plus logcat show whether the turn died clean.
+- tapOn: "Ask something"
+- inputText: 'Summarise my entire portfolio in detail'
+- hideKeyboard
+- tapOn: "Send"
+- tapOn: "Stop"
